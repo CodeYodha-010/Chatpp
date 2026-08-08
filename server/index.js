@@ -1,21 +1,48 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import { encryptMessage } from './lib/crypto.js';
+import { classifyPriority } from './lib/groq.js';
+import helmet from 'helmet';
+import compression from 'compression';
+import env from './config/env.js';
+import logger from './utils/logger.js';
+import { authenticateSocket } from './middleware/auth.js';
+import { generalLimiter } from './middleware/rateLimit.js';
+import { notFound, errorHandler } from './middleware/errorHandler.js';
+import requestLogger from './middleware/requestLogger.js';
+import authRoutes from './routes/auth.js';
+import userRoutes from './routes/users.js';
+import roomRoutes from './routes/rooms.js';
+import seedDatabase from './db/seed.js';
+import Message from './models/Message.js';
+import prisma from './config/database.js';
 
 const app = express();
+app.use(helmet());
+app.use(compression());
+app.use(express.json());
 app.use(cors());
+app.use(generalLimiter);
+app.use(requestLogger);
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/rooms', roomRoutes);
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: 'http://localhost:5173', methods: ['GET', 'POST'] }
+  cors: { origin: env.CORS_ORIGIN, methods: ['GET', 'POST'], credentials: true }
 });
+io.use(authenticateSocket);
 
-const PORT = process.env.PORT || 3001;
+const PORT = env.PORT;
 
 // In-memory storage
 const users = new Map(); // socketId -> { nickname, currentRoom }
-const rooms = { General: [], Tech: [], Random: [] };
-const roomNames = ['General', 'Tech', 'Random'];
+const rooms = { general: [], tech: [], random: [] };
+const roomNames = ['general', 'tech', 'random'];
 
 function getOnlineUsers() {
   return [...users.values()].map(u => ({ nickname: u.nickname }));
@@ -41,7 +68,7 @@ io.on('connection', (socket) => {
   });
 
   // 2a/2b. Join a room
-  socket.on('join_room', ({ room }) => {
+  socket.on('join_room', async ({ room }) => {
     const user = users.get(socket.id);
     if (!user) return;
 
@@ -53,7 +80,31 @@ io.on('connection', (socket) => {
     user.currentRoom = room;
     socket.join(room);
 
-    const roomMessages = rooms[room] || [];
+    // Load messages from memory (fast) + fill from DB if memory is empty
+    let roomMessages = rooms[room] || [];
+    if (roomMessages.length === 0) {
+      try {
+        const roomRow = await prisma.room.findUnique({ where: { name: room } });
+        if (roomRow) {
+          const dbMessages = await Message.listByRoom(roomRow.id, { limit: 50 });
+          roomMessages = dbMessages.map(m => ({
+            id: String(m.id),
+            nickname: m.username,
+            content: m.encryptedContent,
+            iv: m.iv,
+            authTag: m.authTag,
+            priority: m.priority,
+            timestamp: m.createdAt.getTime(),
+            room: room,
+            status: 'delivered'
+          }));
+          rooms[room] = roomMessages;
+        }
+      } catch (dbErr) {
+        logger.error('Failed to load messages from DB', { error: dbErr.message });
+      }
+    }
+
     socket.emit('room_joined', { room, messages: roomMessages });
     console.log(`${user.nickname} joined room: ${room}`);
   });
@@ -68,28 +119,65 @@ io.on('connection', (socket) => {
   });
 
   // 2c. Send message
-  socket.on('send_message', ({ room, message, nickname }) => {
-    if (!message || !message.trim()) return;
-    const user = users.get(socket.id);
-    if (!user) return;
+  socket.on('send_message', async (data) => {
+    try {
+      const encrypted = encryptMessage(data.message);
 
-    const msgId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const msg = {
-      id: msgId,
-      nickname,
-      message: message.trim(),
-      timestamp: new Date().toISOString(),
-      status: 'delivered'
-    };
+      const messageObj = {
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        nickname: data.nickname,
+        username: data.nickname,
+        content: encrypted.encrypted,
+        iv: encrypted.iv,
+        authTag: encrypted.authTag,
+        priority: 'fyi',
+        timestamp: Date.now(),
+        room: data.room,
+        status: 'delivered'
+      };
 
-    if (rooms[room]) {
-      rooms[room].push(msg);
+      if (!rooms[data.room]) rooms[data.room] = [];
+      rooms[data.room].push(messageObj);
+      if (rooms[data.room].length > 100) rooms[data.room].shift();
+
+      io.to(data.room).emit('new_message', messageObj);
+      socket.emit('message_delivered', { id: messageObj.id });
+
+      classifyPriority(data.message)
+        .then(finalPriority => {
+          if (finalPriority && finalPriority !== 'fyi') {
+            const msgIndex = rooms[data.room].findIndex(m => m.id === messageObj.id);
+            if (msgIndex !== -1) {
+              rooms[data.room][msgIndex].priority = finalPriority;
+              io.to(data.room).emit('priority_updated', { id: messageObj.id, priority: finalPriority });
+            }
+          }
+        })
+        .catch(err => console.error('Priority classification failed:', err));
+
+      (async () => {
+        try {
+          const roomRow = await prisma.room.findUnique({ where: { name: data.room } });
+          if (roomRow) {
+            await Message.create({
+              room_id: roomRow.id,
+              user_id: socket.user?.id || null,
+              username: data.nickname,
+              encrypted_content: encrypted.encrypted,
+              iv: encrypted.iv,
+              auth_tag: encrypted.authTag,
+              priority: 'fyi',
+              parent_id: null
+            });
+          }
+        } catch (dbErr) {
+          logger.error('Failed to save message to DB', { error: dbErr.message });
+        }
+      })();
+    } catch (err) {
+      console.error('Error sending message:', err);
+      socket.emit('error', { message: 'Failed to send' });
     }
-
-    // Broadcast to all in room including sender
-    io.to(room).emit('new_message', msg);
-    // Confirm delivery back to sender
-    socket.emit('message_delivered', { id: msgId });
   });
 
   // 3c. Typing indicator
@@ -99,6 +187,12 @@ io.on('connection', (socket) => {
 
   socket.on('stop_typing', ({ room, nickname }) => {
     socket.to(room).emit('user_stop_typing', { nickname });
+  });
+
+  socket.on('get_decryption_key', () => {
+    socket.emit('decryption_key', {
+      key: process.env.CHAT_ENCRYPTION_KEY
+    });
   });
 
   // 1c. Handle disconnect
@@ -113,10 +207,23 @@ io.on('connection', (socket) => {
   });
 });
 
+app.get('/api/get_key', (req, res) => {
+  res.json({
+    key: process.env.CHAT_ENCRYPTION_KEY
+  });
+});
+
 app.get('/', (req, res) => {
   res.json({ status: 'Chat server running' });
 });
 
+app.use(notFound);
+app.use(errorHandler);
+
+seedDatabase().catch(e => logger.error('Seed failed', e));
+
 httpServer.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  logger.info(`Server on port ${PORT}`);
+  logger.info(`${env.NODE_ENV} | CORS: ${env.CORS_ORIGIN}`);
+  logger.info(`DB: PostgreSQL (Prisma) | Auth: JWT ${env.JWT_EXPIRES_IN}`);
 });

@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  displayName   String?   @map("display_name")
+  avatarColor   String?   @default("#3B82F6") @map("avatar_color")
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  rooms       Room[]
+  memberships RoomMember[]
+  messages    Message[]
+  sessions    Session[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model Room {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  type        String    @default("public")
+  createdBy   Int?      @map("created_by")
+  isArchived  Boolean   @default(false) @map("is_archived")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  creator     User?        @relation(fields: [createdBy], references: [id])
+  memberships RoomMember[]
+  messages    Message[]
+
+  @@map("rooms")
+}
+
+model RoomMember {
+  roomId     Int       @map("room_id")
+  userId     Int       @map("user_id")
+  role       String    @default("member")
+  joinedAt   DateTime  @default(now()) @map("joined_at")
+  lastReadAt DateTime? @map("last_read_at")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, userId])
+  @@map("room_members")
+}
+
+model Message {
+  id               Int      @id @default(autoincrement())
+  roomId           Int      @map("room_id")
+  userId           Int?     @map("user_id")
+  username         String
+  encryptedContent String   @map("encrypted_content")
+  iv               String
+  authTag          String   @map("auth_tag")
+  priority         String   @default("fyi")
+  parentId         Int?     @map("parent_id")
+  isEdited         Boolean  @default(false) @map("is_edited")
+  isDeleted        Boolean  @default(false) @map("is_deleted")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  room   Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user   User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  parent Message? @relation("MessageReplies", fields: [parentId], references: [id])
+  replies Message[] @relation("MessageReplies")
+
+  @@index([roomId, createdAt])
+  @@index([priority])
+  @@map("messages")
+}
+
+model Session {
+  id           String   @id
+  userId       Int      @map("user_id")
+  refreshToken String   @unique @map("refresh_token")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model AuditLog {
+  id           Int      @id @default(autoincrement())
+  userId       Int?     @map("user_id")
+  action       String
+  resourceType String?  @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  metadata     String?
+  ipAddress    String?  @map("ip_address")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_log")
+}

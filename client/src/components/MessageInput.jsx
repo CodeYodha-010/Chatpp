@@ -1,17 +1,28 @@
 import { useState, useRef } from 'react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import socket from '../socket';
+import EmojiPicker from './EmojiPicker';
 
 const MAX_CHARS = 500;
 
 function MessageInput({ currentRoom, nickname }) {
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const inputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
   const charCount = message.length;
   const nearLimit = charCount > MAX_CHARS * 0.8;
   const atLimit = charCount >= MAX_CHARS;
+
+  const notifyTyping = () => {
+    socket.emit('typing', { room: currentRoom, nickname });
+    clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit('stop_typing', { room: currentRoom, nickname });
+    }, 2000);
+  };
 
   const handleSend = async () => {
     if (!message.trim() || isSending) return;
@@ -39,17 +50,54 @@ function MessageInput({ currentRoom, nickname }) {
 
   const handleInput = (e) => {
     setMessage(e.target.value);
-    socket.emit('typing', { room: currentRoom, nickname });
-    clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('stop_typing', { room: currentRoom, nickname });
-    }, 2000);
+    notifyTyping();
+  };
+
+  const insertEmoji = (emoji) => {
+    const input = inputRef.current;
+    const start = input ? (input.selectionStart ?? message.length) : message.length;
+    const end = input ? (input.selectionEnd ?? message.length) : message.length;
+    let next = message.slice(0, start) + emoji + message.slice(end);
+    if (next.length > MAX_CHARS) next = next.slice(0, MAX_CHARS);
+    setMessage(next);
+    notifyTyping();
+    requestAnimationFrame(() => {
+      if (input) {
+        const pos = Math.min(start + emoji.length, MAX_CHARS);
+        input.setSelectionRange(pos, pos);
+        input.focus();
+      }
+    });
+  };
+
+  const handleEmojiSelect = (emoji) => {
+    insertEmoji(emoji);
+    setIsPickerOpen(false);
   };
 
   return (
     <div className="message-input-container">
+      <AnimatePresence>
+        {isPickerOpen && (
+          <EmojiPicker
+            onSelect={handleEmojiSelect}
+            onClose={() => setIsPickerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
       <div className="message-input-wrapper">
+        <button
+          type="button"
+          className={`input-btn ${isPickerOpen ? 'active' : ''}`}
+          aria-label="Insert emoji"
+          title="Emoji"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setIsPickerOpen((o) => !o)}
+        >
+          😊
+        </button>
         <input
+          ref={inputRef}
           type="text"
           placeholder="Message..."
           value={message}

@@ -3,9 +3,11 @@ import socket from './socket';
 import AuthPage from './components/AuthPage';
 import Sidebar from './components/Sidebar';
 import ChatRoom from './components/ChatRoom';
+import LandingPage from './components/Landing/LandingPage';
 import { apiGet, apiPost } from './api';
 
 function App() {
+  const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
   const [authView, setAuthView] = useState('login');
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,7 @@ function App() {
           socket.auth = { token };
           socket.connect();
           setAuthView('chat');
+          setView('chat');
         } catch {
           localStorage.removeItem('chat_token');
           localStorage.removeItem('chat_refresh_token');
@@ -96,7 +99,10 @@ function App() {
       socket.emit('join_room', { room: 'general' });
     }, 100);
     setAuthView('chat');
+    setView('chat');
   };
+
+  const handleGetStarted = () => setView('chat');
 
   const handleLogout = async () => {
     try {
@@ -109,6 +115,10 @@ function App() {
     setNickname('');
     socket.disconnect();
     setAuthView('login');
+    setView('landing');
+    setCurrentRoom('general');
+    setMessages([]);
+    setOnlineUsers([]);
   };
 
   const handleJoinRoom = (room) => {
@@ -121,6 +131,10 @@ function App() {
       socket.emit('join_room', { room: roomName });
     }, 200);
   };
+
+  if (view === 'landing' && !loading) {
+    return <LandingPage onGetStarted={handleGetStarted} />;
+  }
 
   if (loading) {
     return (

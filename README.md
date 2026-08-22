@@ -253,6 +253,23 @@ sessions       audit_log                         └── created_at
 
 ---
 
+## Testing
+
+API integration tests live in [`server/tests/`](server/tests/) and run on Node's built-in test runner — no test-framework dependency.
+
+```bash
+cd server
+npm i -D supertest && npm i socket.io-client    # one-time deps
+npm start                                        # terminal 2: keep the app running
+node --env-file=.env --test tests/               # run the suite
+node --env-file=.env tests/cleanup.js --apply    # optional: delete generated test data
+```
+
+- Without a reachable server or `DATABASE_URL`, every suite **self-skips** (CI-safe).
+- See [`server/tests/README.md`](server/tests/README.md) for the full guide, including rate-limit caveats.
+
+---
+
 ## License
 
 MIT

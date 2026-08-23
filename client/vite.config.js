@@ -9,6 +9,13 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true
+      },
+      // Socket.IO needs its own rule with WebSocket support enabled —
+      // otherwise dev sockets 404 at the :5173 origin.
+      '/socket.io': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true
       }
     }
   }

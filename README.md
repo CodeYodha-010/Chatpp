@@ -270,6 +270,41 @@ node --env-file=.env tests/cleanup.js --apply    # optional: delete generated te
 
 ---
 
+## Load Testing (Baseline)
+
+`k6/` contains a Socket.IO-aware load harness — `k6/lib/socketio.js` implements
+engine.io v4 framing (namespace handshake, ping/pong) on top of k6's raw
+WebSocket API, so real socket traffic can be measured.
+
+```bash
+# prerequisites: k6 installed (https://k6.io) + API running in another terminal
+cd server && npm start
+
+# from the repo root — pick one:
+k6 run --env SCENARIO=smoke  k6/chat-load.js
+k6 run --env SCENARIO=load   k6/chat-load.js
+k6 run --env SCENARIO=stress k6/chat-load.js
+```
+
+Env knobs: `BASE_URL`, `WS_BASE`, `SCENARIO`, `SETUP_USERS`, `MSG_EVERY_MS`, `SESSION_MS`, `K6_ROOM`.
+
+Each VU: registers/logs in → opens a WebSocket → `user_join` → `join_room` → sends
+one encrypted message per second → measures **send → `message_delivered` latency**.
+Test rows land in the `agentb-k6` room — removable with the cleanup script.
+
+### Baseline — BEFORE Redis (single Node process, in-memory state)
+
+| Metric | Threshold | Measured |
+|---|---|---|
+| message delivery p95 | < 500 ms | _(pending first smoke run)_ |
+| HTTP p95 | < 500 ms | _(pending)_ |
+| checks pass rate | > 99 % | _(pending)_ |
+
+_After the Redis adapter / BullMQ phases land, the AFTER numbers go in this
+same table so the scaling story is documented with data._
+
+---
+
 ## License
 
 MIT

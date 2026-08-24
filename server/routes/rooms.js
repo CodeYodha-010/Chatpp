@@ -26,8 +26,11 @@ router.post('/', validate(schemas.createRoom), async (req, res) => {
 
 router.get('/:id/messages', async (req, res) => {
   const roomId = parseInt(req.params.id);
-  const limit = Math.min(parseInt(req.query.limit) || 50, 100);
-  const before = req.query.before ? parseInt(req.query.before) : null;
+  if (Number.isNaN(roomId)) return res.status(400).json({ error: 'Invalid room id' });
+  const rawLimit = parseInt(req.query.limit);
+  const limit = Math.min(Number.isNaN(rawLimit) ? 50 : rawLimit, 100);
+  const rawBefore = req.query.before ? parseInt(req.query.before) : null;
+  const before = rawBefore !== null && Number.isNaN(rawBefore) ? null : rawBefore;
 
   const messages = await Message.listByRoom(roomId, { limit, before });
   res.json({ messages });

@@ -26,10 +26,10 @@ const Message = {
 
     const messages = await prisma.message.findMany({
       where,
-      orderBy: { id: 'asc' },
+      orderBy: { id: 'desc' },
       take: limit
     });
-    return messages;
+    return messages.reverse();
   },
 
   async search(roomId, { username = null, priority = null, since = null } = {}) {

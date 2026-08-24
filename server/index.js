@@ -9,7 +9,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import env from './config/env.js';
 import logger from './utils/logger.js';
-import { authenticateSocket } from './middleware/auth.js';
+import { authenticateHTTP, authenticateSocket } from './middleware/auth.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import requestLogger from './middleware/requestLogger.js';
@@ -24,7 +24,7 @@ const app = express();
 app.use(helmet());
 app.use(compression());
 app.use(express.json());
-app.use(cors());
+app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(generalLimiter);
 app.use(requestLogger);
 app.use('/api/auth', authRoutes);
@@ -59,11 +59,12 @@ io.on('connection', (socket) => {
 
   // 1a. User joins with nickname
   socket.on('user_join', ({ nickname }) => {
-    users.set(socket.id, { nickname, currentRoom: null });
-    console.log(`${nickname} joined`);
+    const effectiveNickname = socket.user?.displayName || socket.user?.username || nickname;
+    users.set(socket.id, { nickname: effectiveNickname, currentRoom: null });
+    console.log(`${effectiveNickname} joined`);
 
     io.emit('online_users', getOnlineUsers());
-    io.emit('user_joined', { nickname });
+    io.emit('user_joined', { nickname: effectiveNickname });
     socket.emit('room_list', roomNames);
   });
 
@@ -121,12 +122,13 @@ io.on('connection', (socket) => {
   // 2c. Send message
   socket.on('send_message', async (data) => {
     try {
+      const effectiveNickname = socket.user?.username || data.nickname;
       const encrypted = encryptMessage(data.message);
 
       const messageObj = {
         id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-        nickname: data.nickname,
-        username: data.nickname,
+        nickname: effectiveNickname,
+        username: effectiveNickname,
         content: encrypted.encrypted,
         iv: encrypted.iv,
         authTag: encrypted.authTag,
@@ -162,7 +164,7 @@ io.on('connection', (socket) => {
             await Message.create({
               room_id: roomRow.id,
               user_id: socket.user?.id || null,
-              username: data.nickname,
+              username: effectiveNickname,
               encrypted_content: encrypted.encrypted,
               iv: encrypted.iv,
               auth_tag: encrypted.authTag,
@@ -181,15 +183,18 @@ io.on('connection', (socket) => {
   });
 
   // 3c. Typing indicator
-  socket.on('typing', ({ room, nickname }) => {
-    socket.to(room).emit('user_typing', { nickname });
+  socket.on('typing', ({ room }) => {
+    const n = socket.user?.username;
+    if (n) socket.to(room).emit('user_typing', { nickname: n });
   });
 
-  socket.on('stop_typing', ({ room, nickname }) => {
-    socket.to(room).emit('user_stop_typing', { nickname });
+  socket.on('stop_typing', ({ room }) => {
+    const n = socket.user?.username;
+    if (n) socket.to(room).emit('user_stop_typing', { nickname: n });
   });
 
   socket.on('get_decryption_key', () => {
+    if (!socket.user) return socket.emit('error', { message: 'Unauthorized' });
     socket.emit('decryption_key', {
       key: process.env.CHAT_ENCRYPTION_KEY
     });
@@ -207,7 +212,8 @@ io.on('connection', (socket) => {
   });
 });
 
-app.get('/api/get_key', (req, res) => {
+app.get('/api/get_key', authenticateHTTP, (req, res) => {
+  res.set('Cache-Control', 'private, max-age=3600');
   res.json({
     key: process.env.CHAT_ENCRYPTION_KEY
   });

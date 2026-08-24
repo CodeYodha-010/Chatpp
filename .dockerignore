@@ -1,0 +1,16 @@
+# Keep the build context small AND secret-free.
+.git
+.github
+client
+k6
+deploy
+
+**/node_modules
+**/.env
+**/.env.local
+**/dist
+**/*.log
+server/logs
+server/chat_app.db
+*.db
+nul

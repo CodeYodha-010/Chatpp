@@ -13,7 +13,7 @@ export function errorHandler(err, req, res, next) {
     stack: env.NODE_ENV !== 'production' ? err.stack : undefined
   });
 
-  if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT' || err.message?.includes('UNIQUE constraint')) {
+  if (err.code === 'P2002' || err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT' || err.message?.includes('UNIQUE constraint')) {
     return res.status(409).json({ error: 'Resource already exists' });
   }
 

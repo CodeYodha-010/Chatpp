@@ -1,11 +1,20 @@
 let ENCRYPTION_KEY = null;
+let keyPromise = null;
 
 async function getKey() {
   if (ENCRYPTION_KEY) return ENCRYPTION_KEY;
-  const r = await fetch('/api/get_key');
-  const data = await r.json();
-  ENCRYPTION_KEY = data.key;
-  return ENCRYPTION_KEY;
+  if (!keyPromise) {
+    keyPromise = (async () => {
+      const token = localStorage.getItem('chat_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const r = await fetch('/api/get_key', { headers });
+      if (!r.ok) throw new Error('Failed to fetch key');
+      const data = await r.json();
+      ENCRYPTION_KEY = data.key;
+      return ENCRYPTION_KEY;
+    })().catch(e => { keyPromise = null; throw e; });
+  }
+  return keyPromise;
 }
 
 function hexToBytes(hex) {

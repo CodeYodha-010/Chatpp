@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { createAdapter } from '@socket.io/redis-adapter';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
 
@@ -33,6 +34,16 @@ if (env.REDIS_URL) {
 
 export function getRedis() {
   return client;
+}
+
+// Dedicated pub/sub pair for the Socket.IO adapter: subscribed connections
+// cannot run regular commands, so they must not share the presence client.
+export function createRedisAdapter() {
+  if (!env.REDIS_URL) return null;
+  const pub = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  const sub = pub.duplicate();
+  pub.on('error', (e) => logger.error('Redis adapter error', { error: e.message }));
+  return createAdapter(pub, sub);
 }
 
 export async function setPresence(socketId, data) {

@@ -13,7 +13,7 @@ import { authenticateHTTP, authenticateSocket } from './middleware/auth.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import requestLogger from './middleware/requestLogger.js';
-import { setPresence, deletePresence, getOnlineUsers } from './lib/redis.js';
+import { setPresence, deletePresence, getOnlineUsers, createRedisAdapter } from './lib/redis.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import roomRoutes from './routes/rooms.js';
@@ -36,6 +36,17 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: env.CORS_ORIGIN, methods: ['GET', 'POST'], credentials: true }
 });
+
+// ponytail: Redis adapter makes io.to(room) fan out across every replica via
+// pub/sub; without REDIS_URL this stays the default single-process adapter.
+const redisAdapter = createRedisAdapter();
+if (redisAdapter) {
+  io.adapter(redisAdapter);
+  logger.info('Socket.IO adapter: Redis (multi-instance)');
+} else {
+  logger.info('Socket.IO adapter: in-memory (single instance)');
+}
+
 io.use(authenticateSocket);
 
 const PORT = env.PORT;

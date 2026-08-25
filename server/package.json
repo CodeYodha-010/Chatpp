@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@socket.io/redis-adapter": "^8.3.0",
     "bcrypt": "^6.0.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
@@ -27,5 +28,8 @@
     "rate-limit-redis": "^6.0.1",
     "socket.io": "^4.7.2",
     "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
   }
 }

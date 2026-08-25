@@ -13,6 +13,7 @@ import { authenticateHTTP, authenticateSocket } from './middleware/auth.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import requestLogger from './middleware/requestLogger.js';
+import { setPresence, deletePresence, getOnlineUsers } from './lib/redis.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import roomRoutes from './routes/rooms.js';
@@ -39,14 +40,12 @@ io.use(authenticateSocket);
 
 const PORT = env.PORT;
 
-// In-memory storage
+// Local per-instance state: room routing is inherently instance-local in
+// Socket.IO. The global online list lives in Redis (lib/redis.js) so every
+// replica reports the same presence.
 const users = new Map(); // socketId -> { nickname, currentRoom }
 const rooms = { general: [], tech: [], random: [] };
 const roomNames = ['general', 'tech', 'random'];
-
-function getOnlineUsers() {
-  return [...users.values()].map(u => ({ nickname: u.nickname }));
-}
 
 function getUsersInRoom(room) {
   return [...users.values()]
@@ -58,12 +57,13 @@ io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   // 1a. User joins with nickname
-  socket.on('user_join', ({ nickname }) => {
+  socket.on('user_join', async ({ nickname }) => {
     const effectiveNickname = socket.user?.displayName || socket.user?.username || nickname;
     users.set(socket.id, { nickname: effectiveNickname, currentRoom: null });
+    await setPresence(socket.id, { nickname: effectiveNickname });
     console.log(`${effectiveNickname} joined`);
 
-    io.emit('online_users', getOnlineUsers());
+    io.emit('online_users', await getOnlineUsers());
     io.emit('user_joined', { nickname: effectiveNickname });
     socket.emit('room_list', roomNames);
   });
@@ -201,12 +201,13 @@ io.on('connection', (socket) => {
   });
 
   // 1c. Handle disconnect
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     const user = users.get(socket.id);
     if (user) {
       console.log(`${user.nickname} disconnected`);
       users.delete(socket.id);
-      io.emit('online_users', getOnlineUsers());
+      await deletePresence(socket.id);
+      io.emit('online_users', await getOnlineUsers());
       io.emit('user_left', { nickname: user.nickname });
     }
   });

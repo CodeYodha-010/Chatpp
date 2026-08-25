@@ -11,7 +11,8 @@ const envSchema = Joi.object({
   RATE_LIMIT_MAX: Joi.number().default(100),
   BCRYPT_ROUNDS: Joi.number().default(10),
   GROQ_API_KEY: Joi.string().optional(),
-  CHAT_ENCRYPTION_KEY: Joi.string().optional()
+  CHAT_ENCRYPTION_KEY: Joi.string().optional(),
+  REDIS_URL: Joi.string().allow('').optional()
 }).unknown(true);
 
 const { value: env, error } = envSchema.validate(process.env);

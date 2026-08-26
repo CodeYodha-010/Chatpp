@@ -14,6 +14,7 @@ import { generalLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import requestLogger from './middleware/requestLogger.js';
 import { setPresence, deletePresence, getOnlineUsers, createRedisAdapter } from './lib/redis.js';
+import { enqueueClassification, subscribeToPriorities } from './lib/queue.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import roomRoutes from './routes/rooms.js';
@@ -48,6 +49,17 @@ if (redisAdapter) {
 }
 
 io.use(authenticateSocket);
+
+// Worker results arrive via Redis pub/sub: update the local room cache and
+// rebroadcast so every replica (and its clients) sees the final priority.
+subscribeToPriorities(({ msgId, room, priority }) => {
+  const arr = rooms[room];
+  if (arr) {
+    const idx = arr.findIndex((m) => m.id === msgId);
+    if (idx !== -1) arr[idx].priority = priority;
+  }
+  io.to(room).emit('priority_updated', { id: msgId, priority });
+});
 
 const PORT = env.PORT;
 
@@ -156,17 +168,28 @@ io.on('connection', (socket) => {
       io.to(data.room).emit('new_message', messageObj);
       socket.emit('message_delivered', { id: messageObj.id });
 
-      classifyPriority(data.message)
-        .then(finalPriority => {
-          if (finalPriority && finalPriority !== 'fyi') {
-            const msgIndex = rooms[data.room].findIndex(m => m.id === messageObj.id);
-            if (msgIndex !== -1) {
-              rooms[data.room][msgIndex].priority = finalPriority;
-              io.to(data.room).emit('priority_updated', { id: messageObj.id, priority: finalPriority });
+      // Classification is offloaded to the BullMQ worker when Redis is
+      // available; enqueue failures fall back to inline so delivery never
+      // depends on the AI path.
+      let queued = false;
+      try {
+        queued = await enqueueClassification({ msgId: messageObj.id, room: data.room, message: data.message });
+      } catch (queueErr) {
+        console.error('Enqueue failed, falling back inline:', queueErr.message);
+      }
+      if (!queued) {
+        classifyPriority(data.message)
+          .then(finalPriority => {
+            if (finalPriority && finalPriority !== 'fyi') {
+              const msgIndex = rooms[data.room].findIndex(m => m.id === messageObj.id);
+              if (msgIndex !== -1) {
+                rooms[data.room][msgIndex].priority = finalPriority;
+                io.to(data.room).emit('priority_updated', { id: messageObj.id, priority: finalPriority });
+              }
             }
-          }
-        })
-        .catch(err => console.error('Priority classification failed:', err));
+          })
+          .catch(err => console.error('Priority classification failed:', err));
+      }
 
       (async () => {
         try {

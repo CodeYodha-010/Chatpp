@@ -134,12 +134,22 @@ io.on('connection', (socket) => {
   });
 
   // 2b. Create a new room
-  socket.on('create_room', ({ room }) => {
+  socket.on('create_room', async ({ room }) => {
     if (!room || rooms[room]) return;
     rooms[room] = [];
     roomNames.push(room);
     io.emit('room_created', { room });
     io.emit('room_list', roomNames);
+
+    try {
+      await prisma.room.upsert({
+        where: { name: room },
+        update: {},
+        create: { name: room, description: `${room} room`, type: 'public' }
+      });
+    } catch (err) {
+      logger.error('Failed to persist room', { error: err.message });
+    }
   });
 
   // 2c. Send message
@@ -227,13 +237,6 @@ io.on('connection', (socket) => {
     if (n) socket.to(room).emit('user_stop_typing', { nickname: n });
   });
 
-  socket.on('get_decryption_key', () => {
-    if (!socket.user) return socket.emit('error', { message: 'Unauthorized' });
-    socket.emit('decryption_key', {
-      key: process.env.CHAT_ENCRYPTION_KEY
-    });
-  });
-
   // 1c. Handle disconnect
   socket.on('disconnect', async () => {
     const user = users.get(socket.id);
@@ -262,6 +265,14 @@ app.use(notFound);
 app.use(errorHandler);
 
 seedDatabase().catch(e => logger.error('Seed failed', e));
+
+// Load existing rooms from DB into memory
+const dbRooms = await prisma.room.findMany({ where: { isArchived: false }, select: { name: true } });
+for (const r of dbRooms) {
+  if (!roomNames.includes(r.name)) roomNames.push(r.name);
+  if (!rooms[r.name]) rooms[r.name] = [];
+}
+logger.info(`Loaded ${dbRooms.length} rooms from database`);
 
 httpServer.listen(PORT, () => {
   logger.info(`Server on port ${PORT}`);

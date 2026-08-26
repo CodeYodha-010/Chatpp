@@ -70,7 +70,8 @@ export async function authenticateSocket(socket, next) {
 
 export function optionalAuth(req, res, next) {
   if (req.headers.authorization?.startsWith('Bearer ')) {
-    return authenticateHTTP(req, res, next);
+    authenticateHTTP(req, res, next);
+    return;
   }
   req.user = null;
   next();

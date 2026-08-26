@@ -24,9 +24,9 @@ async function classifyPriority(message) {
         },
         { role: 'user', content: message }
       ],
-      model: 'llama-3.3-70b-versatile',
+      model: 'openai/gpt-oss-20b',
       temperature: 0,
-      max_tokens: 10
+      max_tokens: 300
     });
     const priority = completion.choices[0].message.content.trim().toLowerCase();
     return ['urgent', 'fyi', 'social'].includes(priority) ? priority : 'fyi';

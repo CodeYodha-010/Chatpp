@@ -1,20 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PriorityTabs from './PriorityTabs';
 import { decryptMessage } from '../utils/crypto';
 import SearchBar from './SearchBar';
 import MessageInput from './MessageInput';
+import { getAvatarColor } from '../utils/avatar';
 
 function ChatRoom({ currentRoom, messages, currentUser, nickname, typingUsers }) {
   const user = currentUser || nickname;
-
-  // Safe diagnostic logging
-  React.useEffect(() => {
-    console.log('[ChatRoom] room=', currentRoom, 'messages=', messages?.length, 'typing=', typingUsers?.length);
-    if (messages?.length) {
-      console.log('[ChatRoom] sample=', messages[0]);
-    }
-  }, [currentRoom, messages, typingUsers]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [decryptedMessages, setDecryptedMessages] = useState({});
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -107,11 +100,6 @@ function ChatRoom({ currentRoom, messages, currentUser, nickname, typingUsers })
       setTimeout(() => el.classList.remove('message-highlight'), 2000);
     }
     setIsSearchOpen(false);
-  };
-
-  const getAvatarColor = (name) => {
-    const hash = (name || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return `hsl(${hash * 7 % 360}, 65%, 55%)`;
   };
 
   return (

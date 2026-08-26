@@ -46,9 +46,9 @@ router.post('/register', authLimiter, validate(schemas.register), async (req, re
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         }
       });
-      await tx.auditLog.create({ data: { userId: created.id, action: 'register', ipAddress: req.ip } });
       return { user: created, token: realToken };
     });
+    await prisma.auditLog.create({ data: { userId: user.id, action: 'register', ipAddress: req.ip } }).catch(() => {});
 
     logger.info('User registered', { userId: user.id, username: user.username });
     res.status(201).json({ user, token, refreshToken });
@@ -82,8 +82,8 @@ router.post('/login', authLimiter, validate(schemas.login), async (req, res, nex
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         }
       });
-      await tx.auditLog.create({ data: { userId: user.id, action: 'login', ipAddress: req.ip } });
     });
+    await prisma.auditLog.create({ data: { userId: user.id, action: 'login', ipAddress: req.ip } }).catch(() => {});
 
     logger.info('User logged in', { userId: user.id, username: user.username });
     res.json({ user, token, refreshToken });

@@ -109,9 +109,10 @@ function SearchBar({ messages, decryptedMessages, onJumpToMessage, onClose }) {
 
 function highlightMatch(text, query) {
   if (!query) return text;
-  const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
-  return text.split(regex).map((part, i) =>
-    regex.test(part) ? <mark key={i}>{part}</mark> : part
+  const escaped = escapeRegex(query);
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.toLowerCase() ? <mark key={i}>{part}</mark> : part
   );
 }
 function escapeRegex(str) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getAvatarColor } from '../utils/avatar';
 
 function Sidebar({ rooms, currentRoom, onlineUsers, nickname, onJoinRoom, onCreateRoom, onLogout, user }) {
   const [showNewRoomInput, setShowNewRoomInput] = useState(false);
@@ -15,11 +16,6 @@ function Sidebar({ rooms, currentRoom, onlineUsers, nickname, onJoinRoom, onCrea
 
   const displayName = user?.display_name || user?.username || nickname || 'Guest';
   const initials = displayName.slice(0, 2).toUpperCase();
-
-  const getAvatarColor = (name) => {
-    const hash = (name || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return `hsl(${hash * 7 % 360}, 65%, 55%)`;
-  };
 
   const avatarColor = user?.avatar_color || getAvatarColor(displayName);
 
@@ -102,13 +98,13 @@ function Sidebar({ rooms, currentRoom, onlineUsers, nickname, onJoinRoom, onCrea
             <span className="section-count">{onlineUsers.length}</span>
           </div>
           <ul className="online-users-list">
-            {onlineUsers.map((u, i) => (
+            {onlineUsers.map((u) => (
               <motion.li
-                key={i}
+                key={u.nickname}
                 className="online-user-item"
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05, type: 'spring', duration: 0.3 }}
+                transition={{ type: 'spring', duration: 0.3 }}
               >
                 <div
                   className="user-avatar-sm"

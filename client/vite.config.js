@@ -3,6 +3,15 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      // ship both entry pages: the React app and the CONTINENTAL showcase
+      input: {
+        main: 'index.html',
+        landing: 'landing.html'
+      }
+    }
+  },
   server: {
     port: 5173,
     proxy: {

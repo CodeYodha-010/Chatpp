@@ -7,7 +7,9 @@ import LandingPage from './components/Landing/LandingPage';
 import { apiGet, apiPost } from './api';
 
 function App() {
-  const [view, setView] = useState('landing');
+  const entryParams = new URLSearchParams(window.location.search);
+  const enteringApp = entryParams.get('enter') === '1';
+  const [view, setView] = useState(enteringApp ? 'auth' : 'landing');
   const [user, setUser] = useState(null);
   const [authView, setAuthView] = useState('login');
   const [loading, setLoading] = useState(true);
@@ -17,6 +19,13 @@ function App() {
   const [currentRoom, setCurrentRoom] = useState('general');
   const [messages, setMessages] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
+
+  // "/" hands the first impression to the CONTINENTAL showcase page.
+  useEffect(() => {
+    if (!loading && view === 'landing') {
+      window.location.replace('/landing.html');
+    }
+  }, [loading, view]);
 
   useEffect(() => {
     const initAuth = async () => {

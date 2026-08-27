@@ -1,5 +1,7 @@
 import prisma from '../config/database.js';
 import { verifyPassword } from '../utils/password.js';
+import bcrypt from 'bcrypt';
+import env from '../config/env.js';
 
 const User = {
   async findById(id) {
@@ -22,7 +24,10 @@ const User = {
 
   async authenticate(email, password) {
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (!user) return null;
+    if (!user) {
+      await bcrypt.compare(password, '$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvali');
+      return null;
+    }
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) return null;
     const { passwordHash, ...safe } = user;

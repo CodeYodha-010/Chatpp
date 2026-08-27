@@ -9,7 +9,7 @@ const envSchema = Joi.object({
   CORS_ORIGIN: Joi.string().default('http://localhost:5173'),
   RATE_LIMIT_WINDOW_MS: Joi.number().default(900000),
   RATE_LIMIT_MAX: Joi.number().default(100),
-  BCRYPT_ROUNDS: Joi.number().default(10),
+  BCRYPT_ROUNDS: Joi.number().default(12),
   GROQ_API_KEY: Joi.string().optional(),
   CHAT_ENCRYPTION_KEY: Joi.string().optional(),
   REDIS_URL: Joi.string().allow('').optional()

@@ -1,8 +1,13 @@
 import prisma from '../config/database.js';
 import { hashPassword } from '../utils/password.js';
 import logger from '../utils/logger.js';
+import env from '../config/env.js';
 
 async function seedDatabase() {
+  if (env.NODE_ENV === 'production') {
+    logger.info('Production mode: skipping database seeding');
+    return;
+  }
   try {
     const count = await prisma.user.count();
     if (count > 0) {

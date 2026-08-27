@@ -21,7 +21,15 @@ export const schemas = {
   register: Joi.object({
     username: Joi.string().alphanum().min(3).max(30).required(),
     email: Joi.string().email().required(),
-    password: Joi.string().min(6).max(100).required(),
+    password: Joi.string()
+      .min(8).max(100)
+      .pattern(/[a-zA-Z]/, 'letter')
+      .pattern(/[0-9]/, 'number')
+      .required()
+      .messages({
+        'string.pattern.name': 'Password must contain at least one letter and one number',
+        'string.min': 'Password must be at least 8 characters long'
+      }),
     display_name: Joi.string().max(50).optional()
   }),
   login: Joi.object({

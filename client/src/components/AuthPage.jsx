@@ -114,10 +114,10 @@ function AuthPage({ onAuthSuccess }) {
               <input
                 type={showPassword ? 'text' : 'password'}
                 name="password"
-                placeholder="Min 6 characters"
+                placeholder="Min 8 characters, letters and numbers"
                 value={form.password}
                 onChange={handleChange}
-                minLength={6}
+                minLength={8}
                 maxLength={100}
                 required
               />

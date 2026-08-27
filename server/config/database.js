@@ -30,4 +30,23 @@ process.on('beforeExit', async () => {
   await prisma.$disconnect();
 });
 
+// Session cleanup: run on startup + every 24 hours
+async function cleanupExpiredSessions() {
+  try {
+    const { count } = await prisma.session.deleteMany({
+      where: { expiresAt: { lt: new Date() } }
+    });
+    if (count > 0) {
+      logger.info(`Cleaned up ${count} expired sessions`);
+    }
+    return count;
+  } catch (err) {
+    logger.error('Session cleanup failed', { error: err.message });
+    return 0;
+  }
+}
+
+await cleanupExpiredSessions();
+setInterval(cleanupExpiredSessions, 24 * 60 * 60 * 1000);
+
 export default prisma;

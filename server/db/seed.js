@@ -38,6 +38,20 @@ async function seedDatabase() {
     });
     logger.info('Demo user created: demo@example.com / demo1234');
 
+    // Add all existing users as members of the three default rooms
+    const allUsers = await prisma.user.findMany({ select: { id: true } });
+    const allRooms = await prisma.room.findMany({ where: { isArchived: false }, select: { id: true } });
+    for (const u of allUsers) {
+      for (const r of allRooms) {
+        await prisma.roomMember.upsert({
+          where: { roomId_userId: { roomId: r.id, userId: u.id } },
+          update: {},
+          create: { roomId: r.id, userId: u.id, role: 'member' }
+        });
+      }
+    }
+    logger.info(`Added ${allUsers.length} users to ${allRooms.length} default rooms`);
+
     logger.info('Seeding complete');
   } catch (err) {
     logger.error('Seed failed', { error: err.message });

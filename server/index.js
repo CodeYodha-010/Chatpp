@@ -120,6 +120,20 @@ io.on('connection', (socket) => {
     user.currentRoom = room;
     socket.join(room);
 
+    // Add user to room_members table so they can access messages via REST API
+    try {
+      const roomRow = await prisma.room.findUnique({ where: { name: room }, select: { id: true } });
+      if (roomRow && socket.user?.id) {
+        await prisma.roomMember.upsert({
+          where: { roomId_userId: { roomId: roomRow.id, userId: socket.user.id } },
+          update: {},
+          create: { roomId: roomRow.id, userId: socket.user.id, role: 'member' }
+        });
+      }
+    } catch (err) {
+      logger.error('Failed to add user to room_members', { error: err.message });
+    }
+
     // Load messages from memory (fast) + fill from DB if memory is empty
     let roomMessages = rooms[room] || [];
     if (roomMessages.length === 0) {

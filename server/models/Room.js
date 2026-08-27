@@ -42,6 +42,14 @@ const Room = {
       include: { user: { select: { id: true, username: true, displayName: true, avatarColor: true } } }
     });
     return members.map(m => ({ ...m.user, role: m.role }));
+  },
+
+  async isMember(roomId, userId) {
+    const member = await prisma.roomMember.findUnique({
+      where: { roomId_userId: { roomId, userId } },
+      select: { roomId: true }
+    });
+    return !!member;
   }
 };
 

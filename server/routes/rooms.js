@@ -32,6 +32,9 @@ router.get('/:id/messages', async (req, res) => {
   const rawBefore = req.query.before ? parseInt(req.query.before) : null;
   const before = rawBefore !== null && Number.isNaN(rawBefore) ? null : rawBefore;
 
+  const isMember = await Room.isMember(roomId, req.user.id);
+  if (!isMember) return res.status(403).json({ error: 'Not a member of this room' });
+
   const messages = await Message.listByRoom(roomId, { limit, before });
   res.json({ messages });
 });

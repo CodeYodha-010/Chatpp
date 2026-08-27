@@ -96,7 +96,7 @@ router.get('/me', authenticateHTTP, (req, res) => {
   res.json({ user: req.user });
 });
 
-router.post('/refresh', async (req, res, next) => {
+router.post('/refresh', authLimiter, async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
     if (!refreshToken) return res.status(400).json({ error: 'refreshToken required' });

@@ -81,7 +81,15 @@ io.on('connection', (socket) => {
 
   // 1a. User joins with nickname
   socket.on('user_join', async ({ nickname }) => {
-    const effectiveNickname = socket.user?.displayName || socket.user?.username || nickname;
+    if (!socket.user) {
+      socket.emit('error', { message: 'Authentication required' });
+      return;
+    }
+    const effectiveNickname = socket.user.displayName || socket.user.username || nickname;
+    if (typeof effectiveNickname !== 'string' || effectiveNickname.length === 0 || effectiveNickname.length > 50) {
+      socket.emit('error', { message: 'Invalid nickname' });
+      return;
+    }
     users.set(socket.id, { nickname: effectiveNickname, currentRoom: null });
     await setPresence(socket.id, { nickname: effectiveNickname });
     console.log(`${effectiveNickname} joined`);
@@ -93,6 +101,14 @@ io.on('connection', (socket) => {
 
   // 2a/2b. Join a room
   socket.on('join_room', async ({ room }) => {
+    if (typeof room !== 'string' || room.length === 0 || room.length > 50) {
+      socket.emit('error', { message: 'Invalid room name' });
+      return;
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(room)) {
+      socket.emit('error', { message: 'Room name can only contain letters, numbers, hyphens, underscores' });
+      return;
+    }
     const user = users.get(socket.id);
     if (!user) return;
 
@@ -134,8 +150,34 @@ io.on('connection', (socket) => {
   });
 
   // 2b. Create a new room
+  const roomCreationTracker = new Map();
   socket.on('create_room', async ({ room }) => {
-    if (!room || rooms[room]) return;
+    if (typeof room !== 'string' || room.length === 0 || room.length > 50) {
+      socket.emit('error', { message: 'Invalid room name' });
+      return;
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(room)) {
+      socket.emit('error', { message: 'Room name can only contain letters, numbers, hyphens, underscores' });
+      return;
+    }
+    if (!socket.user) {
+      socket.emit('error', { message: 'Authentication required' });
+      return;
+    }
+    if (rooms[room]) {
+      socket.emit('error', { message: 'Room already exists' });
+      return;
+    }
+    const userId = socket.user.id;
+    const now = Date.now();
+    const userCreations = roomCreationTracker.get(userId) || [];
+    const recentCreations = userCreations.filter(t => now - t < 3600000);
+    if (recentCreations.length >= 5) {
+      socket.emit('error', { message: 'Room creation limit reached (5 per hour)' });
+      return;
+    }
+    recentCreations.push(now);
+    roomCreationTracker.set(userId, recentCreations);
     rooms[room] = [];
     roomNames.push(room);
     io.emit('room_created', { room });
@@ -155,7 +197,19 @@ io.on('connection', (socket) => {
   // 2c. Send message
   socket.on('send_message', async (data) => {
     try {
-      const effectiveNickname = socket.user?.username || data.nickname;
+      if (typeof data?.message !== 'string' || data.message.length === 0 || data.message.length > 5000) {
+        socket.emit('error', { message: 'Message must be a non-empty string up to 5000 characters' });
+        return;
+      }
+      if (typeof data?.room !== 'string' || data.room.length === 0 || data.room.length > 50) {
+        socket.emit('error', { message: 'Invalid room name' });
+        return;
+      }
+      if (!socket.user) {
+        socket.emit('error', { message: 'Authentication required' });
+        return;
+      }
+      const effectiveNickname = socket.user.username;
       const encrypted = encryptMessage(data.message);
 
       const messageObj = {

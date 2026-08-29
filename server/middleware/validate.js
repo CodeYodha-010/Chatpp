@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { isDisposableEmail } from './disposableEmail.js';
 
 export function validate(schema, target = 'body') {
   return (req, res, next) => {
@@ -15,6 +16,16 @@ export function validate(schema, target = 'body') {
     req[target] = value;
     next();
   };
+}
+
+export function checkDisposableEmail(req, res, next) {
+  const email = req.body?.email;
+  if (email && isDisposableEmail(email)) {
+    return res.status(400).json({
+      error: 'Please use a valid email address. Temporary email addresses are not allowed.'
+    });
+  }
+  next();
 }
 
 export const schemas = {

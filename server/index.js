@@ -1,14 +1,16 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import { encryptMessage } from './lib/crypto.js';
+import cookieParser from 'cookie-parser';
+import { encryptMessage, decryptMessage } from './lib/crypto.js';
 import { classifyPriority } from './lib/groq.js';
 import helmet from 'helmet';
 import compression from 'compression';
 import env from './config/env.js';
 import logger from './utils/logger.js';
+import escapeHtml from './utils/sanitize.js';
 import { authenticateHTTP, authenticateSocket } from './middleware/auth.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
@@ -18,24 +20,50 @@ import { enqueueClassification, subscribeToPriorities } from './lib/queue.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import roomRoutes from './routes/rooms.js';
+import inviteRoutes from './routes/invite.js';
 import seedDatabase from './db/seed.js';
 import Message from './models/Message.js';
 import prisma from './config/database.js';
 
 const app = express();
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https:", "wss:", "ws:", "http://localhost:5173"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"]
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false,
+}));
 app.use(compression());
 app.use(express.json());
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+app.use(cookieParser());
+app.use(cors({
+  origin: env.CORS_ORIGIN.split(',').map(o => o.trim()),
+  credentials: true
+}));
 app.use(generalLimiter);
 app.use(requestLogger);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/invite', inviteRoutes);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: env.CORS_ORIGIN, methods: ['GET', 'POST'], credentials: true }
+  cors: {
+    origin: env.CORS_ORIGIN.split(',').map(o => o.trim()),
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
 });
 
 // ponytail: Redis adapter makes io.to(room) fan out across every replica via
@@ -77,7 +105,7 @@ function getUsersInRoom(room) {
 }
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  logger.info('User connected', { socketId: socket.id });
 
   // 1a. User joins with nickname
   socket.on('user_join', async ({ nickname }) => {
@@ -92,7 +120,7 @@ io.on('connection', (socket) => {
     }
     users.set(socket.id, { nickname: effectiveNickname, currentRoom: null });
     await setPresence(socket.id, { nickname: effectiveNickname });
-    console.log(`${effectiveNickname} joined`);
+    logger.info(`${effectiveNickname} joined`, { socketId: socket.id });
 
     io.emit('online_users', await getOnlineUsers());
     io.emit('user_joined', { nickname: effectiveNickname });
@@ -144,9 +172,7 @@ io.on('connection', (socket) => {
           roomMessages = dbMessages.map(m => ({
             id: String(m.id),
             nickname: m.username,
-            content: m.encryptedContent,
-            iv: m.iv,
-            authTag: m.authTag,
+            content: decryptMessage({ encrypted: m.encryptedContent, iv: m.iv, authTag: m.authTag }),
             priority: m.priority,
             timestamp: m.createdAt.getTime(),
             room: room,
@@ -160,7 +186,7 @@ io.on('connection', (socket) => {
     }
 
     socket.emit('room_joined', { room, messages: roomMessages });
-    console.log(`${user.nickname} joined room: ${room}`);
+    logger.info(`${user.nickname} joined room`, { room, socketId: socket.id });
   });
 
   // 2b. Create a new room
@@ -224,19 +250,23 @@ io.on('connection', (socket) => {
         return;
       }
       const effectiveNickname = socket.user.username;
-      const encrypted = encryptMessage(data.message);
+      const sanitized = escapeHtml(data.message);
+      const encrypted = encryptMessage(sanitized);
+      const parentId = typeof data?.parent_id === 'string' ? data.parent_id : null;
 
       const messageObj = {
         id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         nickname: effectiveNickname,
         username: effectiveNickname,
-        content: encrypted.encrypted,
+        content: sanitized,
         iv: encrypted.iv,
         authTag: encrypted.authTag,
+        encryptedContent: encrypted.encrypted,
         priority: 'fyi',
         timestamp: Date.now(),
         room: data.room,
-        status: 'delivered'
+        status: 'delivered',
+        parentId: parentId
       };
 
       if (!rooms[data.room]) rooms[data.room] = [];
@@ -246,6 +276,21 @@ io.on('connection', (socket) => {
       io.to(data.room).emit('new_message', messageObj);
       socket.emit('message_delivered', { id: messageObj.id });
 
+      if (parentId) {
+        io.to(data.room).emit('thread_reply', {
+          parentId,
+          reply: {
+            id: messageObj.id,
+            nickname: messageObj.nickname,
+            content: messageObj.content,
+            iv: messageObj.iv,
+            authTag: messageObj.authTag,
+            timestamp: messageObj.timestamp,
+            priority: messageObj.priority
+          }
+        });
+      }
+
       // Classification is offloaded to the BullMQ worker when Redis is
       // available; enqueue failures fall back to inline so delivery never
       // depends on the AI path.
@@ -253,7 +298,7 @@ io.on('connection', (socket) => {
       try {
         queued = await enqueueClassification({ msgId: messageObj.id, room: data.room, message: data.message });
       } catch (queueErr) {
-        console.error('Enqueue failed, falling back inline:', queueErr.message);
+        logger.error('Enqueue failed, falling back inline', { error: queueErr.message });
       }
       if (!queued) {
         classifyPriority(data.message)
@@ -266,7 +311,7 @@ io.on('connection', (socket) => {
               }
             }
           })
-          .catch(err => console.error('Priority classification failed:', err));
+          .catch(err => logger.error('Priority classification failed', { error: err }));
       }
 
       (async () => {
@@ -281,7 +326,7 @@ io.on('connection', (socket) => {
               iv: encrypted.iv,
               auth_tag: encrypted.authTag,
               priority: 'fyi',
-              parent_id: null
+              parent_id: parentId
             });
           }
         } catch (dbErr) {
@@ -289,7 +334,7 @@ io.on('connection', (socket) => {
         }
       })();
     } catch (err) {
-      console.error('Error sending message:', err);
+      logger.error('Error sending message', { error: err.message, socketId: socket.id });
       socket.emit('error', { message: 'Failed to send' });
     }
   });
@@ -309,7 +354,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', async () => {
     const user = users.get(socket.id);
     if (user) {
-      console.log(`${user.nickname} disconnected`);
+      logger.info(`${user.nickname} disconnected`, { socketId: socket.id });
       users.delete(socket.id);
       await deletePresence(socket.id);
       io.emit('online_users', await getOnlineUsers());
@@ -318,12 +363,9 @@ io.on('connection', (socket) => {
   });
 });
 
-app.get('/api/get_key', authenticateHTTP, (req, res) => {
-  res.set('Cache-Control', 'private, max-age=3600');
-  res.json({
-    key: process.env.CHAT_ENCRYPTION_KEY
-  });
-});
+// Encryption key is server-only — no longer exposed to clients.
+// Messages are decrypted server-side before being sent via socket.
+// The /api/get_key endpoint has been removed for security.
 
 app.get('/', (req, res) => {
   res.json({ status: 'Chat server running' });
@@ -342,8 +384,28 @@ for (const r of dbRooms) {
 }
 logger.info(`Loaded ${dbRooms.length} rooms from database`);
 
-httpServer.listen(PORT, () => {
+const server = httpServer.listen(PORT, () => {
   logger.info(`Server on port ${PORT}`);
   logger.info(`${env.NODE_ENV} | CORS: ${env.CORS_ORIGIN}`);
   logger.info(`DB: PostgreSQL (Prisma) | Auth: JWT ${env.JWT_EXPIRES_IN}`);
 });
+
+// Graceful shutdown
+const shutdown = async (signal) => {
+  logger.info(`Received ${signal}, shutting down gracefully`);
+  io.close(() => {
+    logger.info('Socket.IO closed');
+  });
+  server.close(async () => {
+    await prisma.$disconnect();
+    logger.info('Server shut down');
+    process.exit(0);
+  });
+  setTimeout(() => {
+    logger.error('Force shutting down');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

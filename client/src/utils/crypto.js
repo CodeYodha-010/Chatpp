@@ -1,43 +1,9 @@
-let ENCRYPTION_KEY = null;
-let keyPromise = null;
+// The encryption key is now server-only.
+// Messages are decrypted server-side before being sent via socket.
+// This file is kept for any future client-side crypto needs (e.g., end-to-end encryption).
 
-async function getKey() {
-  if (ENCRYPTION_KEY) return ENCRYPTION_KEY;
-  if (!keyPromise) {
-    keyPromise = (async () => {
-      const token = localStorage.getItem('chat_token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const r = await fetch('/api/get_key', { headers });
-      if (!r.ok) throw new Error('Failed to fetch key');
-      const data = await r.json();
-      ENCRYPTION_KEY = data.key;
-      return ENCRYPTION_KEY;
-    })().catch(e => { keyPromise = null; throw e; });
-  }
-  return keyPromise;
-}
-
-function hexToBytes(hex) {
-  const b = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) b[i / 2] = parseInt(hex.substr(i, 2), 16);
-  return b;
-}
-
-export async function decryptMessage(encrypted, iv, authTag) {
-  try {
-    const keyHex = await getKey();
-    const keyBytes = hexToBytes(keyHex);
-    const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
-    const ivBytes = hexToBytes(iv);
-    const ct = hexToBytes(encrypted);
-    const atBytes = hexToBytes(authTag);
-    const combined = new Uint8Array(ct.length + atBytes.length);
-    combined.set(ct);
-    combined.set(atBytes, ct.length);
-    const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBytes }, key, combined);
-    return new TextDecoder().decode(dec);
-  } catch (e) {
-    console.error('Decrypt failed:', e);
-    return '🔒 Encrypted';
-  }
+export async function decryptMessage() {
+  // Client-side decryption is no longer needed.
+  // Server decrypts messages before sending them to clients.
+  return '';
 }

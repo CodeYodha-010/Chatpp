@@ -1,17 +1,24 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect } from 'react';
 import socket from './socket';
 import AuthPage from './components/AuthPage';
 import Sidebar from './components/Sidebar';
 import ChatRoom from './components/ChatRoom';
-import LandingPage from './components/Landing/LandingPage';
 import { apiGet, apiPost } from './api';
 
+async function refreshToken() {
+  try {
+    const data = await apiPost('/api/auth/refresh', {});
+    sessionStorage.setItem('chat_token', data.token);
+    return data.token;
+  } catch {
+    sessionStorage.removeItem('chat_token');
+    return null;
+  }
+}
+
 function App() {
-  const entryParams = new URLSearchParams(window.location.search);
-  const enteringApp = entryParams.get('enter') === '1';
-  const [view, setView] = useState(enteringApp ? 'auth' : 'landing');
+  const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
-  const [authView, setAuthView] = useState('login');
   const [loading, setLoading] = useState(true);
   const [nickname, setNickname] = useState('');
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -20,28 +27,32 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
 
-  // "/" hands the first impression to the CONTINENTAL showcase page.
   useEffect(() => {
-    if (!loading && view === 'landing') {
-      window.location.replace('/landing.html');
-    }
-  }, [loading, view]);
+    const urlParams = new URLSearchParams(window.location.search);
+    const shouldEnter = urlParams.has('enter');
 
-  useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('chat_token');
+      let token = sessionStorage.getItem('chat_token');
+      if (!token) {
+        token = await refreshToken();
+      }
       if (token) {
         try {
           const data = await apiGet('/api/auth/me', token);
           setUser(data.user);
           setNickname(data.user.display_name || data.user.username);
           socket.auth = { token };
-          socket.connect();
-          setAuthView('chat');
+        socket.connect();
           setView('chat');
         } catch {
-          localStorage.removeItem('chat_token');
-          localStorage.removeItem('chat_refresh_token');
+        sessionStorage.removeItem('chat_token');
+          setView('landing');
+        }
+      } else {
+        if (shouldEnter) {
+          setView('auth');
+        } else {
+          setView('landing');
         }
       }
       setLoading(false);
@@ -50,11 +61,20 @@ function App() {
   }, []);
 
   useEffect(() => {
-    socket.on('online_users', (users) => setOnlineUsers(users));
-    socket.on('user_joined', () => {});
-    socket.on('user_left', (data) => {
-      setTypingUsers(prev => prev.filter(u => u !== data.nickname));
+    socket.on('connect_error', (err) => {
+      if (err.message === 'Authentication required' || err.message.includes('token')) {
+        refreshToken().then(newToken => {
+          if (newToken) {
+            socket.auth = { token: newToken };
+            socket.connect();
+          } else {
+              setView('landing');
+          }
+        });
+      }
     });
+
+    socket.on('online_users', (users) => setOnlineUsers(users));
     socket.on('room_list', (roomList) => setRooms(roomList));
     socket.on('room_created', (data) => setRooms(prev => [...prev, data.room]));
     socket.on('room_joined', (data) => {
@@ -84,9 +104,8 @@ function App() {
     });
 
     return () => {
+      socket.off('connect_error');
       socket.off('online_users');
-      socket.off('user_joined');
-      socket.off('user_left');
       socket.off('room_list');
       socket.off('room_created');
       socket.off('room_joined');
@@ -98,6 +117,12 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!loading && view === 'landing') {
+      window.location.href = '/landing.html';
+    }
+  }, [view, loading]);
+
   const handleAuthSuccess = (userData, token) => {
     setUser(userData);
     setNickname(userData.display_name || userData.username);
@@ -107,23 +132,18 @@ function App() {
       socket.emit('user_join', { nickname: userData.display_name || userData.username });
       socket.emit('join_room', { room: 'general' });
     }, 100);
-    setAuthView('chat');
     setView('chat');
   };
 
-  const handleGetStarted = () => setView('chat');
-
   const handleLogout = async () => {
     try {
-      const token = localStorage.getItem('chat_token');
+      const token = sessionStorage.getItem('chat_token');
       if (token) await apiPost('/api/auth/logout', {}, token);
     } catch {}
-    localStorage.removeItem('chat_token');
-    localStorage.removeItem('chat_refresh_token');
+    sessionStorage.removeItem('chat_token');
     setUser(null);
     setNickname('');
     socket.disconnect();
-    setAuthView('login');
     setView('landing');
     setCurrentRoom('general');
     setMessages([]);
@@ -131,34 +151,52 @@ function App() {
   };
 
   const handleJoinRoom = (room) => {
+    setMessages([]);
     socket.emit('join_room', { room });
   };
 
   const handleCreateRoom = (roomName) => {
+    setMessages([]);
     socket.emit('create_room', { room: roomName });
-    setTimeout(() => {
-      socket.emit('join_room', { room: roomName });
-    }, 200);
+    socket.emit('join_room', { room: roomName });
   };
 
-  if (view === 'landing' && !loading) {
-    return <LandingPage onGetStarted={handleGetStarted} />;
-  }
+  const handleInviteFriend = async () => {
+    const username = window.prompt('Enter the username of the friend you want to invite:');
+    if (!username) return;
+    const token = sessionStorage.getItem('chat_token');
+    if (!token) return;
+    try {
+      const data = await apiPost('/api/invite', { username }, token);
+      if (data.room) {
+        setMessages([]);
+        setCurrentRoom(data.room);
+        socket.emit('join_room', { room: data.room });
+      }
+      window.alert(data.message || 'Invite sent!');
+    } catch (err) {
+      window.alert(err.message || 'Failed to send invite. User may not exist.');
+    }
+  };
 
   if (loading) {
     return (
-      <div className="chat-app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="spinner" style={{ width: 32, height: 32, border: '3px solid var(--surface-3)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+      <div className='chat-app' style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className='spinner' style={{ width: 32, height: 32, border: '3px solid var(--surface-3)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
       </div>
     );
   }
 
-  if (authView !== 'chat') {
+  if (view === 'auth') {
     return <AuthPage onAuthSuccess={handleAuthSuccess} />;
   }
 
+  if (view === 'landing') {
+    return null;
+  }
+
   return (
-    <div className="chat-app">
+    <div className='chat-app'>
       <Sidebar
         rooms={rooms}
         currentRoom={currentRoom}
@@ -168,6 +206,7 @@ function App() {
         onCreateRoom={handleCreateRoom}
         onLogout={handleLogout}
         user={user}
+        onInviteFriend={handleInviteFriend}
       />
       <ChatRoom
         currentRoom={currentRoom}

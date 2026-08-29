@@ -34,8 +34,7 @@ function AuthPage({ onAuthSuccess }) {
         : { username: form.username, email: form.email, password: form.password, display_name: form.display_name || undefined };
 
       const data = await apiPost(endpoint, body);
-      localStorage.setItem('chat_token', data.token);
-      if (data.refreshToken) localStorage.setItem('chat_refresh_token', data.refreshToken);
+      sessionStorage.setItem('chat_token', data.token);
       onAuthSuccess(data.user, data.token);
     } catch (err) {
       setError(err.message);

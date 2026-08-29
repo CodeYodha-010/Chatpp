@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { getAvatarColor } from '../utils/avatar';
 
-function Sidebar({ rooms, currentRoom, onlineUsers, nickname, onJoinRoom, onCreateRoom, onLogout, user }) {
+function Sidebar({ rooms, currentRoom, onlineUsers, nickname, onJoinRoom, onCreateRoom, onLogout, user, onInviteFriend, showSearch, onSearch }) {
   const [showNewRoomInput, setShowNewRoomInput] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleCreateRoom = () => {
     if (newRoomName.trim()) {
@@ -14,107 +13,81 @@ function Sidebar({ rooms, currentRoom, onlineUsers, nickname, onJoinRoom, onCrea
     }
   };
 
-  const displayName = user?.display_name || user?.username || nickname || 'Guest';
-  const initials = displayName.slice(0, 2).toUpperCase();
-
-  const avatarColor = user?.avatar_color || getAvatarColor(displayName);
+  const handleSearchSubmit = () => {
+    if (searchQuery.trim()) {
+      onSearch(searchQuery.trim());
+      setSearchQuery('');
+    }
+  };
 
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        <div className="app-brand">
-          <div className="brand-icon">C</div>
-          <h2>Chat</h2>
-        </div>
-        <div className="sidebar-user-card">
-          <div className="user-avatar" style={{ background: avatarColor }}>
-            {initials}
-          </div>
-          <div className="user-details">
-            <div className="user-name">{displayName}</div>
-            <div className="user-status">Online</div>
-          </div>
-          <button className="logout-btn" onClick={onLogout} title="Disconnect">
-            ⏻
-          </button>
+        <h2>Chat</h2>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {onInviteFriend && (
+            <button className="invite-btn" onClick={() => onInviteFriend()} title="Invite friend">
+              Invite
+            </button>
+          )}
+          <button className="logout-btn" onClick={onLogout} title="Logout">Logout</button>
         </div>
       </div>
 
+      {showSearch && (
+        <div className="sidebar-search">
+          <input
+            type="text"
+            placeholder="Search rooms or users..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
+          />
+        </div>
+      )}
+
       <div className="sidebar-content">
         <div className="sidebar-section">
-          <div className="sidebar-section-header">
-            <h3>Rooms</h3>
-            <span className="section-count">{rooms.length}</span>
-          </div>
+          <h3>Rooms</h3>
           <ul className="room-list">
             {rooms.map((room) => (
-              <motion.li
+              <li
                 key={room}
                 className={`room-item ${currentRoom === room ? 'active' : ''}`}
                 onClick={() => onJoinRoom(room)}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: 'spring', duration: 0.3, bounce: 0.1 }}
               >
-                <span className="room-icon">#</span>
                 {room}
-              </motion.li>
+              </li>
             ))}
           </ul>
 
-          <AnimatePresence>
-            {!showNewRoomInput ? (
-              <motion.button
-                className="new-room-btn"
-                onClick={() => setShowNewRoomInput(true)}
-                whileTap={{ scale: 0.97 }}
-              >
-                + New Room
-              </motion.button>
-            ) : (
-              <motion.div
-                className="new-room-input"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ type: 'spring', duration: 0.3, bounce: 0.1 }}
-              >
-                <input
-                  type="text"
-                  placeholder="Room name..."
-                  value={newRoomName}
-                  onChange={(e) => setNewRoomName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateRoom()}
-                  autoFocus
-                />
-                <button onClick={handleCreateRoom}>Add</button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {!showNewRoomInput ? (
+            <button className="new-room-btn" onClick={() => setShowNewRoomInput(true)}>
+              + New Room
+            </button>
+          ) : (
+            <div className="new-room-input">
+              <input
+                type="text"
+                placeholder="Room name..."
+                value={newRoomName}
+                onChange={(e) => setNewRoomName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateRoom()}
+                autoFocus
+              />
+              <button onClick={handleCreateRoom}>Add</button>
+            </div>
+          )}
         </div>
 
         <div className="sidebar-section">
-          <div className="sidebar-section-header">
-            <h3>Online</h3>
-            <span className="section-count">{onlineUsers.length}</span>
-          </div>
+          <h3>Online ({onlineUsers.length})</h3>
           <ul className="online-users-list">
-            {onlineUsers.map((u) => (
-              <motion.li
-                key={u.nickname}
-                className="online-user-item"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ type: 'spring', duration: 0.3 }}
-              >
-                <div
-                  className="user-avatar-sm"
-                  style={{ background: getAvatarColor(u.nickname) }}
-                >
-                  {u.nickname?.[0]?.toUpperCase()}
-                  <span className="online-dot"></span>
-                </div>
-                {u.nickname}
-              </motion.li>
+            {onlineUsers.map((userItem, index) => (
+              <li key={index} className="online-user">
+                <span className="online-dot"></span>
+                {userItem.nickname}
+              </li>
             ))}
           </ul>
         </div>

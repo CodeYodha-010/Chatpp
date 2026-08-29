@@ -7,7 +7,7 @@ const API = import.meta.env.VITE_API_URL ?? '';
 export async function apiPost(path, body, token) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
+  const res = await fetch(`${API}${path}`, { method: 'POST', headers, body: JSON.stringify(body), credentials: 'include' });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
@@ -16,7 +16,7 @@ export async function apiPost(path, body, token) {
 export async function apiGet(path, token) {
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API}${path}`, { headers });
+  const res = await fetch(`${API}${path}`, { headers, credentials: 'include' });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;

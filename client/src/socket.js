@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 //   /socket.io (ws: true) to the API server; production uses a reverse proxy.
 // - Or set VITE_SOCKET_URL to target an absolute host directly.
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
-const token = localStorage.getItem('chat_token');
+const token = sessionStorage.getItem('chat_token');
 
 const socket = io(SOCKET_URL, {
   autoConnect: false,

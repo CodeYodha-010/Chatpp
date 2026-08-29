@@ -595,7 +595,7 @@ footer.site .foot-links a:hover { color:var(--heading); }
       <a href="#architecture">Architecture</a>
       <a href="https://github.com/CodeYodha-010/Chatpp" target="_blank" rel="noopener">GitHub</a>
     </nav>
-    <a class="pill-white" href="#open-app" data-launch>Launch App</a>
+    <a class="pill-white" href="#open-app" data-launch>Get Started</a>
   </header>
 
   <div class="hero-center">
@@ -607,7 +607,7 @@ footer.site .foot-links a:hover { color:var(--heading); }
         <div class="glassbar">
           <label class="visually-hidden" for="entry-email">Work email</label>
           <input id="entry-email" type="email" required placeholder="Enter your email" autocomplete="email">
-          <button class="pill-white" type="submit">Launch App</button>
+          <button class="pill-white" type="submit">Get Started</button>
         </div>
       </form>
       <p class="live-status fade-up" style="--fy:0.6rem;" data-arm="1700">presence &middot; adapter &middot; worker &middot; all flowing</p>
@@ -844,7 +844,7 @@ footer.site .foot-links a:hover { color:var(--heading); }
   <div class="shell">
     <h2 class="big rv" style="--i:0">Your messages are<br>already in motion.</h2>
     <div class="close-actions" data-stagger-children>
-      <a class="pill-white rv" style="--i:1" href="#" data-launch>Launch App</a>
+      <a class="pill-white rv" style="--i:1" href="#" data-launch>Get Started</a>
       <a class="pill-ghost rv" style="--i:2" href="https://github.com/CodeYodha-010/Chatpp" target="_blank" rel="noopener">Read the source</a>
     </div>
   </div>
@@ -861,7 +861,7 @@ footer.site .foot-links a:hover { color:var(--heading); }
   </a>
   <div class="foot-links">
     <a href="https://github.com/CodeYodha-010/Chatpp" target="_blank" rel="noopener">GitHub</a>
-    <a href="#" data-launch>Open App</a>
+    <a href="#" data-launch>Sign In</a>
     <a href="#top">Back to top</a>
   </div>
   <p class="foot-line">&copy; 2026 Continental &middot; engineered for real time.</p>
@@ -890,7 +890,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 function launchApp(email) {
   try { if (email) localStorage.setItem('continental_email', email); } catch {}
   const qs = email ? 'enter=1&email=' + encodeURIComponent(email) : 'enter=1';
-  window.location.href = 'http://localhost:5173/' + '?' + qs;
+  window.location.href = window.location.origin + '?' + qs;
 }
 document.querySelectorAll('[data-launch]').forEach(el => {
   el.addEventListener('click', (e) => {

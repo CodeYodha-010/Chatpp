@@ -27,7 +27,7 @@ export const generalLimiter = rateLimit(limiterConfig('chatrl:general', {
 
 export const authLimiter = rateLimit(limiterConfig('chatrl:auth', {
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 25,
   skipSuccessfulRequests: true,
   message: { error: 'Too many authentication attempts, please try again later' }
 }));

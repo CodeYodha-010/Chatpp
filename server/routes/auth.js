@@ -1,16 +1,27 @@
 import express from 'express';
 const router = express.Router();
 import User from '../models/User.js';
-import { hashPassword } from '../utils/password.js';
+import { hashPassword, verifyPassword } from '../utils/password.js';
 import { signToken, generateRefreshToken } from '../utils/jwt.js';
 import { authenticateHTTP } from '../middleware/auth.js';
-import { validate, schemas } from '../middleware/validate.js';
+import { validate, schemas, checkDisposableEmail } from '../middleware/validate.js';
 import { authLimiter } from '../middleware/rateLimit.js';
 import prisma from '../config/database.js';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 
-router.post('/register', authLimiter, validate(schemas.register), async (req, res, next) => {
+const COOKIE_OPTS = {
+  httpOnly: true,
+  sameSite: 'lax',
+  maxAge: 30 * 24 * 60 * 60 * 1000,
+  secure: process.env.NODE_ENV === 'production',
+};
+
+function setRefreshCookie(res, refreshToken) {
+  res.cookie('refreshToken', refreshToken, COOKIE_OPTS);
+}
+
+router.post('/register', authLimiter, validate(schemas.register), checkDisposableEmail, async (req, res, next) => {
   try {
     const { username, email, password, display_name } = req.body;
 
@@ -51,13 +62,14 @@ router.post('/register', authLimiter, validate(schemas.register), async (req, re
     await prisma.auditLog.create({ data: { userId: user.id, action: 'register', ipAddress: req.ip } }).catch(() => {});
 
     logger.info('User registered', { userId: user.id, username: user.username });
-    res.status(201).json({ user, token, refreshToken });
+    setRefreshCookie(res, refreshToken);
+    res.status(201).json({ user, token });
   } catch (e) {
     next(e);
   }
 });
 
-router.post('/login', authLimiter, validate(schemas.login), async (req, res, next) => {
+router.post('/login', authLimiter, validate(schemas.login), checkDisposableEmail, async (req, res, next) => {
   try {
     const { email, password } = req.body;
     const user = await User.authenticate(email, password);
@@ -86,7 +98,8 @@ router.post('/login', authLimiter, validate(schemas.login), async (req, res, nex
     await prisma.auditLog.create({ data: { userId: user.id, action: 'login', ipAddress: req.ip } }).catch(() => {});
 
     logger.info('User logged in', { userId: user.id, username: user.username });
-    res.json({ user, token, refreshToken });
+    setRefreshCookie(res, refreshToken);
+    res.json({ user, token });
   } catch (e) {
     next(e);
   }
@@ -98,8 +111,8 @@ router.get('/me', authenticateHTTP, (req, res) => {
 
 router.post('/refresh', authLimiter, async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) return res.status(400).json({ error: 'refreshToken required' });
+    const refreshToken = req.cookies?.refreshToken;
+    if (!refreshToken) return res.status(401).json({ error: 'No refresh token cookie' });
 
     const session = await prisma.session.findUnique({ where: { refreshToken } });
     if (!session || session.expiresAt < new Date()) {
@@ -130,7 +143,8 @@ router.post('/refresh', authLimiter, async (req, res, next) => {
       })
     ]);
 
-    res.json({ user, token: newToken, refreshToken: newRefreshToken });
+    setRefreshCookie(res, newRefreshToken);
+    res.json({ user, token: newToken });
   } catch (e) {
     next(e);
   }
@@ -138,6 +152,7 @@ router.post('/refresh', authLimiter, async (req, res, next) => {
 
 router.post('/logout', authenticateHTTP, async (req, res) => {
   await prisma.session.deleteMany({ where: { userId: req.user.id } });
+  res.clearCookie('refreshToken', COOKIE_OPTS);
   logger.info('User logged out', { userId: req.user.id });
   res.json({ message: 'Logged out' });
 });

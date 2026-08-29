@@ -43,6 +43,15 @@ const Message = {
       orderBy: { id: 'desc' },
       take: 100
     });
+  },
+
+  async listByParent(parentId, { limit = 50 } = {}) {
+    if (!parentId) return [];
+    return prisma.message.findMany({
+      where: { parentId: String(parentId), isDeleted: false },
+      orderBy: { id: 'asc' },
+      take: limit
+    });
   }
 };
 

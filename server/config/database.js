@@ -2,7 +2,12 @@ import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger.js';
 
 const prisma = new PrismaClient({
-  log: ['error', 'warn']
+  log: ['error', 'warn'],
+  // Increase timeouts to handle Neon free-tier cold starts
+  transactionOptions: {
+    maxWait: 30000,
+    timeout: 30000,
+  },
 });
 
 // Test connection with retry

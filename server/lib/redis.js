@@ -63,9 +63,17 @@ export async function allPresence() {
 
 export async function getOnlineUsers() {
   const all = await allPresence();
-  return Object.values(all)
+  const users = Object.values(all)
     .map((v) => {
       try { return JSON.parse(v); } catch { return null; }
     })
     .filter(Boolean);
+
+  // Deduplicate by nickname (multiple tabs = multiple socketIds with same nickname)
+  const seen = new Set();
+  return users.filter(u => {
+    if (seen.has(u.nickname)) return false;
+    seen.add(u.nickname);
+    return true;
+  });
 }

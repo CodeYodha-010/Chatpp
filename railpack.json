@@ -1,0 +1,7 @@
+{
+  "v": 1,
+  "app": {
+    "dockerfilePath": "chat-app/deploy/Dockerfile",
+    "buildContext": "chat-app"
+  }
+}

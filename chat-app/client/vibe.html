@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Continental — Messages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=SF+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   CONTINENTAL — Monochrome Premium Design System
+   ============================================ */
+:root {
+  --font: "Inter","SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono: "SF Mono","SFMono-Regular",ui-monospace,"Roboto Mono",Menlo,monospace;
+  --bg: #f4f4f5;
+  --panel: #ffffff;
+  --panel-2: #f7f7f8;
+  --text: #131316;
+  --text-2: #5f5f66;
+  --text-3: #9a9aa2;
+  --line: #e9e9ec;
+  --line-2: #f0f0f2;
+  --accent: #16161a;
+  --accent-ink: #ffffff;
+  --bubble-in: #f1f1f3;
+  --bubble-in-ink: #1a1a1e;
+  --bubble-out: #16161a;
+  --bubble-out-ink: #ffffff;
+  --sel: #16161a;
+  --sel-ink: #ffffff;
+  --shadow: 0 1px 2px rgba(18,18,22,.04), 0 12px 40px rgba(18,18,22,.06);
+  --shadow-lg: 0 24px 60px rgba(18,18,22,.10);
+  --ring: rgba(22,22,26,.14);
+}
+
+html[data-theme="dark"] {
+  --bg: #0a0a0c;
+  --panel: #131316;
+  --panel-2: #1b1b1f;
+  --text: #f4f4f5;
+  --text-2: #a9a9b0;
+  --text-3: #6c6c74;
+  --line: #26262b;
+  --line-2: #202025;
+  --accent: #f4f4f5;
+  --accent-ink: #0a0a0c;
+  --bubble-in: #1e1e23;
+  --bubble-in-ink: #f1f1f3;
+  --bubble-out: #f4f4f5;
+  --bubble-out-ink: #0a0a0c;
+  --sel: #f4f4f5;
+  --sel-ink: #0a0a0c;
+  --shadow: 0 1px 2px rgba(0,0,0,.2), 0 12px 40px rgba(0,0,0,.3);
+  --shadow-lg: 0 24px 60px rgba(0,0,0,.4);
+  --ring: rgba(255,255,255,.12);
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { font-family: var(--font); background: var(--bg); color: var(--text); }
+body { height:100vh; overflow:hidden; }
+::selection { background: var(--sel); color: var(--sel-ink); }
+
+/* App Shell */
+.app {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  max-width: 1520px;
+  margin: auto;
+  height: 100vh;
+}
+.app > * {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+/* Left Nav Rail */
+.rail {
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.rail-brand {
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+.rail-btn {
+  width: 46px; height: 46px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms ease, color 150ms ease;
+}
+.rail-btn:hover { background: var(--panel-2); }
+.rail-btn.active { background: var(--accent); color: var(--accent-ink); }
+.rail-btn svg { width: 21px; height: 21px; }
+.rail-spacer { flex: 1; }
+
+/* List Column */
+.list-col {
+  width: 330px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.list-header {
+  padding: 20px 20px 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.list-header h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.list-header .count {
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.list-search {
+  padding: 0 16px 12px;
+}
+.list-search input {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-family: var(--font);
+  font-size: 13.5px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.list-search input:focus {
+  border-color: var(--text-3);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.list-search .search-icon {
+  position: absolute;
+  left: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+.chips {
+  padding: 0 16px 8px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+.chip {
+  padding: 4px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 150ms;
+}
+.chip.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+.chat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 150ms;
+}
+.chat-item:hover { background: var(--panel-2); }
+.chat-item.active { background: var(--panel-2); }
+.avatar {
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.chat-info { flex: 1; min-width: 0; }
+.chat-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-preview {
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.chat-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.chat-time {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.badge {
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.section-label {
+  padding: 8px 20px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+/* Main Conversation */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.conv-header {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.back-btn {
+  display: none;
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+.back-btn svg { width: 20px; height: 20px; }
+.conv-header-info { flex: 1; }
+.conv-header-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+.conv-header-status {
+  font-size: 12px;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+.status-dot.online { background: #10b981; }
+.status-dot.offline { background: #9ca3af; }
+.dm-btn {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text-2);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dm-btn:hover {
+  background: var(--panel-3);
+  color: var(--text);
+}
+.no-chats {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.conv-header-actions {
+  display: flex;
+  gap: 4px;
+}
+.icon-btn {
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms;
+}
+.icon-btn:hover { background: var(--panel-2); }
+.icon-btn svg { width: 18px; height: 18px; }
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.messages::-webkit-scrollbar { width: 6px; }
+.messages::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 3px; }
+
+.date-pill {
+  align-self: center;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin: 12px 0;
+}
+.msg {
+  max-width: 60%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: pop 0.24s ease;
+  position: relative;
+}
+@keyframes pop {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.msg.incoming {
+  align-self: flex-start;
+  background: var(--bubble-in);
+  color: var(--bubble-in-ink);
+  border-radius: 14px 14px 14px 4px;
+}
+.msg.outgoing {
+  align-self: flex-end;
+  background: var(--bubble-out);
+  color: var(--bubble-out-ink);
+  border-radius: 14px 14px 4px 14px;
+}
+.msg-meta {
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.msg.outgoing .msg-meta { justify-content: flex-end; }
+
+.composer {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.composer-input {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.composer-input:focus {
+  border-color: var(--text-3);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.send-btn {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 150ms;
+}
+.send-btn:hover { transform: translateY(-1px); }
+.send-btn:active { transform: scale(0.96); }
+.send-btn svg { width: 18px; height: 18px; }
+
+/* Welcome */
+.welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+}
+.welcome-icon {
+  width: 88px; height: 88px;
+  border-radius: 24px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+.welcome-icon svg { width: 40px; height: 40px; color: var(--text-3); }
+.welcome h2 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 8px;
+}
+.welcome p {
+  font-size: 13.5px;
+  color: var(--text-2);
+  max-width: 340px;
+  line-height: 1.5;
+}
+
+/* Settings */
+.settings {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.settings-nav {
+  width: 224px;
+  border-right: 1px solid var(--line);
+  padding: 20px 0;
+  flex-shrink: 0;
+}
+.settings-nav-title {
+  font-size: 20px;
+  font-weight: 800;
+  padding: 0 20px 16px;
+}
+.settings-nav-item {
+  padding: 10px 20px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 150ms;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings-nav-item:hover { background: var(--panel-2); }
+.settings-nav-item.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.settings-nav-item svg { width: 18px; height: 18px; }
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+.settings-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.12em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.settings-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.settings-row {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.settings-icon svg { width: 18px; height: 18px; color: var(--text-2); }
+.settings-row-info { flex: 1; }
+.settings-row-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.settings-row-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.toggle {
+  width: 44px; height: 25px;
+  border-radius: 12px;
+  background: var(--line);
+  position: relative;
+  cursor: pointer;
+  transition: background 150ms;
+  flex-shrink: 0;
+}
+.toggle.on { background: var(--accent); }
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 19px; height: 19px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 150ms;
+}
+.toggle.on::after { transform: translateX(19px); }
+
+/* Mobile */
+@media (max-width: 760px) {
+  .rail { display: none; }
+  .app { padding: 0; gap: 0; }
+  .list-col { width: 100%; border-radius: 0; }
+  .main { display: none; }
+  .app.thread-open .list-col { display: none; }
+  .app.thread-open .main { display: flex; }
+  .back-btn { display: flex; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Nav Rail -->
+  <nav class="rail">
+    <div class="rail-brand">C</div>
+    <button class="rail-btn active" title="Chats">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </button>
+    <button class="rail-btn" title="Archive">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 8v13H3V8"/><rect x="1" y="3" width="22" height="4"/></svg>
+    </button>
+    <button class="rail-btn" title="Contacts">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </button>
+    <button class="rail-btn" title="Settings">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button class="rail-btn" title="Find People">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><path d="M21 12.76c-.34.03-.68.04-1.02.04-3.42 0-6.18-2.76-6.18-6.18 0-1.21.33-2.33.89-3.3l-1.64-1.64a.75.75 0 0 0 0 1.06l.3.3a7.5 7.5 0 0 1 1.24 1.55 3.75 3.75 0 0 0-2.13 3.28c0 2.07 1.68 3.75 3.75 3.75.94 0 1.79-.35 2.45-.92l.3-.3a.75.75 0 0 0 1.06 0l2.5-2.5a7.5 7.5 0 0 1-1.4 2.13c0 .34.01.69.04 1.02.01.13.03.26.06.39.03.14.07.27.11.41a.75.75 0 0 0 .95.48z"/><circle cx="9" cy="9" r="2"/><circle cx="15" cy="15" r="2"/></svg>
+    </button>
+    <div class="rail-spacer"></div>
+    <button class="rail-btn" title="Toggle theme">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+    <div class="avatar" style="width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;">A</div>
+  </nav>
+
+  <!-- List Column -->
+  <aside class="list-col">
+    <div class="list-header">
+      <h2>Inbox</h2>
+      <span class="count">10 chats</span>
+    </div>
+    <div class="list-search" style="position:relative;">
+      <span class="search-icon">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      </span>
+      <input type="text" placeholder="Search chats" id="searchInput">
+    </div>
+    <div class="chips">
+      <button class="chip active">All</button>
+      <button class="chip">Unread</button>
+      <button class="chip">Archived</button>
+      <button class="chip">Groups</button>
+    </div>
+    <div class="chat-list" id="chatList"></div>
+  </aside>
+
+  <!-- Main Conversation -->
+  <section class="main" id="main">
+    <div class="welcome" id="welcome">
+      <div class="welcome-icon">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <h2>Your messages</h2>
+      <p>Choose a conversation from the list to start chatting. Simple, fast, and designed to feel effortless.</p>
+    </div>
+    <div id="conversation" style="display:none;flex-direction:column;height:100%;">
+      <div class="conv-header">
+        <button class="back-btn" id="backBtn">
+          <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="avatar" id="convAvatar" style="width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;">A</div>
+        <div class="conv-header-info">
+          <div class="conv-header-name" id="convName">Aarav Sharma</div>
+          <div class="conv-header-status"><span class="status-dot"></span><span id="convStatus">online</span></div>
+        </div>
+        <div class="conv-header-actions">
+          <button class="icon-btn" title="More">
+            <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="messages" id="messages"></div>
+      <div class="composer">
+        <button class="icon-btn" title="Emoji">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+        </button>
+        <input type="text" class="composer-input" placeholder="Type a message" id="messageInput">
+        <button class="send-btn" id="sendBtn">
+          <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section class="settings" id="settings" style="display:none;">
+    <div class="settings-nav">
+      <div class="settings-nav-title">Settings</div>
+      <div class="settings-nav-item active" data-section="profile">
+        <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Profile
+      </div>
+      <div class="settings-nav-item" data-section="account">
+        <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Account
+      </div>
+      <div class="settings-nav-item" data-section="privacy">
+        <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Privacy
+      </div>
+      <div class="settings-nav-item" data-section="notifications">
+        <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Notifications
+      </div>
+      <div class="settings-nav-item" data-section="appearance">
+        <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        Appearance
+      </div>
+      <div class="settings-nav-item" data-section="security">
+        <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Security
+      </div>
+    </div>
+    <div class="settings-content" id="settingsContent"></div>
+  </section>
+</div>
+
+<!-- Find People Overlay -->
+<div class="overlay" id="findPeopleOverlay" style="display:none;">
+  <div class="overlay-content">
+    <div class="overlay-header">
+      <h3>Find People</h3>
+      <button class="icon-btn" id="closeFindPeople">
+        <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="list-search" style="position:relative;margin-bottom:12px;">
+      <input type="text" placeholder="Search by username..." id="findPeopleInput">
+    </div>
+    <div class="chat-list" id="findPeopleList" style="max-height:400px;"></div>
+  </div>
+</div>
+
+<style>
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.overlay-content {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  width: 400px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+.overlay-header {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+.overlay-header h3 {
+  font-size: 17px;
+  font-weight: 700;
+}
+.list-search input {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-family: var(--font);
+  font-size: 13.5px;
+  color: var(--text);
+  outline: none;
+}
+.list-search {
+  position: relative;
+  padding: 0 20px 12px;
+}
+.list-search .search-icon {
+  position: absolute;
+  left: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+</style>
+
+<script>
+/* ============================================
+   CONTINENTAL — Backend Connected Chat
+   ============================================ */
+
+const chatToken = sessionStorage.getItem('chat_token') || null;
+let isMockMode = false;
+
+let currentUser = {
+  id: 1,
+  username: 'demo',
+  displayName: 'Demo User',
+  email: 'demo@continental.chat'
+};
+let rooms = ['general', 'tech', 'random'];
+let messagesByRoom = {};
+let currentRoom = null;
+let onlineUsers = [{ nickname: 'Demo User' }];
+let currentFilter = 'all';
+
+const mockMessages = {
+  general: [
+    { id: '1', nickname: 'alex', content: 'Hey everyone! Welcome to Continental.', timestamp: Date.now() - 3600000, room: 'general', status: 'delivered' },
+    { id: '2', nickname: 'Demo User', content: 'Thanks! Excited to be here.', timestamp: Date.now() - 3500000, room: 'general', status: 'delivered' },
+    { id: '3', nickname: 'sarah', content: 'How\'s everyone doing today?', timestamp: Date.now() - 600000, room: 'general', status: 'delivered' },
+    { id: '4', nickname: 'Demo User', content: 'Great! Just setting up the new workspace.', timestamp: Date.now() - 500000, room: 'general', status: 'delivered' }
+  ],
+  tech: [
+    { id: '5', nickname: 'dev', content: 'Anyone tried the new Vite 6 features?', timestamp: Date.now() - 7200000, room: 'tech', status: 'delivered' },
+    { id: '6', nickname: 'Demo User', content: 'Yes! The new plugin API is really clean.', timestamp: Date.now() - 7000000, room: 'tech', status: 'delivered' }
+  ],
+  random: [
+    { id: '7', nickname: 'pat', content: 'Coffee recommendation? Need fuel for coding.', timestamp: Date.now() - 1800000, room: 'random', status: 'delivered' }
+  ]
+};
+
+const mockReplies = ['Sounds great!', 'I\'ll check it out.', 'Thanks for sharing!', 'Let me look into that.', 'Noted!'];
+const mockOnlineUsers = ['alex', 'sarah', 'dev', 'pat', 'Demo User'];
+
+const mockUsers = [
+  { id: 2, username: 'alex', displayName: 'Alex Chen', status: 'online', lastActive: null },
+  { id: 3, username: 'sarah', displayName: 'Sarah Johnson', status: 'online', lastActive: null },
+  { id: 4, username: 'dev', displayName: 'Dev Patel', status: 'offline', lastActive: '2025-01-15T10:30:00Z' },
+  { id: 5, username: 'pat', displayName: 'Pat Wilson', status: 'online', lastActive: null },
+  { id: 6, username: 'maya', displayName: 'Maya Rodriguez', status: 'offline', lastActive: '2025-01-14T15:45:00Z' },
+  { id: 7, username: 'kai', displayName: 'Kai Nakamura', status: 'online', lastActive: null }
+];
+
+async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (chatToken) headers['Authorization'] = `Bearer ${chatToken}`;
+  const res = await fetch(path, {
+    ...options,
+    headers: { ...headers, ...(options.headers || {}) },
+    credentials: 'include'
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+let socket = null;
+
+function setupMockMode() {
+  isMockMode = true;
+  // Pre-populate messages for all rooms
+  Object.keys(mockMessages).forEach(room => {
+    messagesByRoom[room] = [...mockMessages[room]];
+  });
+  onlineUsers = mockOnlineUsers;
+  renderChatList();
+  // Auto-join general
+  currentRoom = 'general';
+  renderMessages();
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('conversation').style.display = 'flex';
+  document.getElementById('convName').textContent = '#general';
+   document.getElementById('convAvatar').textContent = 'GE';
+  }
+
+  async function showFindPeople() {
+    const overlay = document.getElementById('findPeopleOverlay');
+    overlay.style.display = 'flex';
+    await renderFindPeopleList();
+  }
+
+  async function renderFindPeopleList() {
+    const input = document.getElementById('findPeopleInput');
+    const searchTerm = input.value.trim().toLowerCase();
+    const container = document.getElementById('findPeopleList');
+
+    let users;
+    if (isMockMode) {
+      users = mockUsers;
+    } else {
+      try {
+        users = await api('/api/users');
+      } catch (e) {
+        users = mockUsers;
+      }
+    }
+
+    const filtered = users.filter(u => u.username.toLowerCase().includes(searchTerm));
+    const currentUsername = currentUser.username || currentUser.displayName;
+
+    container.innerHTML = '';
+    if (filtered.length === 0) {
+      container.innerHTML = '<div class="no-chats">No users found</div>';
+      return;
+    }
+
+    for (const user of filtered) {
+      const isCurrentUser = user.username === currentUsername;
+      const isOnline = user.status === 'online';
+      const div = document.createElement('div');
+      div.className = 'chat-item';
+      div.innerHTML = `
+        <div class="chat-avatar" style="background:var(--accent);color:#fff;font-size:14px;">${user.displayName?.[0] || user.username[0]}</div>
+        <div class="chat-info">
+          <div class="chat-name">${user.displayName || user.username}</div>
+          <div class="chat-meta"><span class="status-dot ${isOnline ? 'online' : 'offline'}"></span> ${isOnline ? 'Online' : 'Offline'}</div>
+        </div>
+        ${!isCurrentUser ? '<button class="dm-btn" title="Message">Message</button>' : ''}
+      `;
+      if (!isCurrentUser) {
+        div.querySelector('.dm-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          startDM(user);
+        });
+      }
+      container.appendChild(div);
+    }
+  }
+
+  async function startDM(user) {
+    const user1 = currentUser.username || currentUser.displayName;
+    const user2 = user.username;
+    if (user1 === user2) return;
+
+    let roomName;
+    if (!isMockMode) {
+      try {
+        const result = await api('/api/invite', {
+          method: 'POST',
+          body: JSON.stringify({ invitee: user.username })
+        });
+        roomName = result.room;
+      } catch (e) {
+        roomName = `dm_${user1}_${user2}`;
+      }
+    } else {
+      roomName = `dm_${user1}_${user2}`;
+    }
+
+    if (!rooms.includes(roomName)) rooms.push(roomName);
+    if (!messagesByRoom[roomName]) messagesByRoom[roomName] = [];
+
+    // Populate mock messages if this is a new mock DM
+    if (isMockMode && mockMessages[roomName]) {
+      messagesByRoom[roomName] = [...mockMessages[roomName]];
+    }
+
+    currentRoom = roomName;
+    document.querySelector('.app').classList.remove('thread-open');
+
+    document.querySelectorAll('.rail-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.rail-btn[title="Chats"]').classList.add('active');
+    showScreen('chat');
+
+    document.getElementById('convName').textContent = user.displayName || user.username;
+    document.getElementById('convAvatar').textContent = (user.displayName?.[0] || user.username[0]).toUpperCase();
+    document.querySelector('.app').classList.add('thread-open');
+
+    renderMessages();
+    renderChatList();
+
+    if (!isMockMode) {
+      socket.emit('join_room', { room: roomName });
+    }
+
+    document.getElementById('findPeopleOverlay').style.display = 'none';
+  }
+
+  async function initBackend() {
+  try {
+    const me = await api('/api/auth/me');
+    currentUser = me.user;
+    
+    if (typeof io === 'undefined') {
+      await new Promise((resolve) => {
+        let done = false;
+        const timer = setTimeout(() => { if (!done) { done = true; resolve(); } }, 5000);
+        const script = document.createElement('script');
+        script.src = 'https://cdn.socket.io/4.8.3/socket.io.min.js';
+        script.onload = () => { if (!done) { done = true; clearTimeout(timer); resolve(); } };
+        script.onerror = () => { if (!done) { done = true; clearTimeout(timer); resolve(); } };
+        document.head.appendChild(script);
+      });
+      if (typeof io === 'undefined') {
+        throw new Error('Socket.IO failed to load');
+      }
+    }
+    
+    socket = io(window.location.origin, { auth: { token: chatToken } });
+    
+    const nickname = currentUser.displayName || currentUser.username || 'User';
+    const onConnect = () => {
+      socket.emit('user_join', { nickname });
+      socket.emit('join_room', { room: 'general' });
+    };
+    
+    if (socket.connected) onConnect();
+    else socket.on('connect', onConnect);
+    
+    socket.on('room_list', (roomList) => {
+      rooms = roomList || [];
+      renderChatList();
+    });
+    
+    socket.on('room_joined', (data) => {
+      currentRoom = data.room;
+      messagesByRoom[data.room] = data.messages || [];
+      renderMessages();
+      renderChatList();
+    });
+    
+    socket.on('new_message', (message) => {
+      if (!messagesByRoom[message.room]) messagesByRoom[message.room] = [];
+      messagesByRoom[message.room].push(message);
+      if (message.room === currentRoom) renderMessages();
+      renderChatList();
+    });
+    
+    socket.on('message_delivered', (data) => {
+      if (currentRoom && messagesByRoom[currentRoom]) {
+        messagesByRoom[currentRoom] = messagesByRoom[currentRoom].map(msg =>
+          msg.id === data.id ? { ...msg, status: 'delivered' } : msg
+        );
+        renderMessages();
+      }
+    });
+    
+    socket.on('priority_updated', (data) => {
+      Object.keys(messagesByRoom).forEach(room => {
+        messagesByRoom[room] = messagesByRoom[room].map(msg =>
+          msg.id === data.id ? { ...msg, priority: data.priority } : msg
+        );
+      });
+      if (currentRoom) renderMessages();
+    });
+    
+    socket.on('online_users', (users) => { onlineUsers = users; });
+    socket.on('connect_error', (err) => {
+      if (err.message === 'Authentication required' || err.message.includes('token')) {
+        sessionStorage.removeItem('chat_token');
+        setupMockMode();
+      }
+    });
+    socket.on('error', (data) => console.error('Socket error:', data.message));
+    
+  } catch {
+    setupMockMode();
+  }
+}
+
+  function getInitials(name) {
+    return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function renderChatList() {
+    const list = document.getElementById('chatList');
+    const search = document.getElementById('searchInput').value.toLowerCase();
+    
+    let filtered = rooms.filter(r => {
+      if (search && !r.toLowerCase().includes(search)) return false;
+      return true;
+    });
+
+    let html = '';
+    filtered.forEach(room => {
+      const roomMsgs = messagesByRoom[room] || [];
+      const last = roomMsgs[roomMsgs.length - 1];
+      const preview = last ? last.content : 'No messages yet';
+      const time = last ? new Date(last.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+      const isActive = currentRoom === room;
+      
+      html += `
+        <div class="chat-item ${isActive ? 'active' : ''}" data-id="${room}">
+          <div class="avatar">${getInitials(room)}</div>
+          <div class="chat-info">
+            <div class="chat-name">#${room}</div>
+            <div class="chat-preview">${preview}</div>
+          </div>
+          <div class="chat-meta">
+            <span class="chat-time">${time}</span>
+          </div>
+        </div>
+      `;
+    });
+    list.innerHTML = html;
+
+    list.querySelectorAll('.chat-item').forEach(item => {
+      item.addEventListener('click', () => openChat(item.dataset.id));
+    });
+  }
+
+  function openChat(room) {
+    if (currentRoom === room) return;
+    currentRoom = room;
+    document.getElementById('welcome').style.display = 'none';
+    document.getElementById('conversation').style.display = 'flex';
+    document.getElementById('convName').textContent = '#' + room;
+    document.getElementById('convStatus').textContent = 'Room';
+    document.getElementById('convAvatar').textContent = getInitials(room);
+    
+    if (isMockMode) {
+      if (!messagesByRoom[room]) {
+        messagesByRoom[room] = [];
+      }
+    } else if (socket) {
+      socket.emit('join_room', { room });
+    }
+    renderMessages();
+    document.querySelector('.app').classList.add('thread-open');
+  }
+
+  function renderMessages() {
+    const container = document.getElementById('messages');
+    if (!currentRoom || !messagesByRoom[currentRoom]) {
+      container.innerHTML = '';
+      return;
+    }
+    
+    let html = '<div class="date-pill">Today</div>';
+    const roomMessages = messagesByRoom[currentRoom];
+    
+    roomMessages.forEach((msg) => {
+      const isMe = msg.nickname === (currentUser?.displayName || currentUser?.username);
+      const type = isMe ? 'outgoing' : 'incoming';
+      html += `
+        <div class="msg ${type}">
+          <div>${escapeHtml(msg.content)}</div>
+          <div class="msg-meta">
+            <span>${new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+            ${isMe ? '<span>✓✓</span>' : ''}
+          </div>
+        </div>
+      `;
+    });
+    
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const text = input.value.trim();
+    if (!text || !currentRoom) return;
+    
+    if (isMockMode) {
+      if (!messagesByRoom[currentRoom]) messagesByRoom[currentRoom] = [];
+      messagesByRoom[currentRoom].push({
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        nickname: currentUser.displayName || currentUser.username,
+        content: text,
+        room: currentRoom,
+        timestamp: Date.now(),
+        status: 'sent'
+      });
+      renderMessages();
+      renderChatList();
+      input.value = '';
+    } else {
+      socket.emit('send_message', { message: text, room: currentRoom });
+      input.value = '';
+    }
+  }
+
+  function showScreen(screen) {
+    document.querySelector('.main').style.display = screen === 'chat' ? 'flex' : 'none';
+    document.getElementById('welcome').style.display = screen === 'chat' && !currentRoom ? 'flex' : 'none';
+    document.getElementById('conversation').style.display = screen === 'chat' && currentRoom ? 'flex' : 'none';
+    document.getElementById('settings').style.display = screen === 'settings' ? 'flex' : 'none';
+  }
+
+  document.getElementById('sendBtn').addEventListener('click', sendMessage);
+  document.getElementById('messageInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendMessage();
+  });
+  document.getElementById('backBtn').addEventListener('click', () => {
+    document.querySelector('.app').classList.remove('thread-open');
+  });
+  document.getElementById('searchInput').addEventListener('input', renderChatList);
+
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('.rail-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.rail-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const title = btn.getAttribute('title');
+      if (title === 'Settings' || title === 'Chats') {
+        showScreen(title === 'Settings' ? 'settings' : 'chat');
+        if (title === 'Chats') document.querySelector('.app').classList.remove('settings-open');
+      }
+      if (title === 'Toggle theme') {
+        const html = document.documentElement;
+        const current = html.getAttribute('data-theme');
+        html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+      }
+    });
+   });
+
+  const findPeopleBtn = document.querySelector('.rail-btn[title="Find People"]');
+  if (findPeopleBtn) {
+    findPeopleBtn.addEventListener('click', () => {
+      document.querySelectorAll('.rail-btn').forEach(b => b.classList.remove('active'));
+      findPeopleBtn.classList.add('active');
+      showFindPeople();
+    });
+  }
+
+  document.getElementById('closeFindPeople').addEventListener('click', () => {
+    document.getElementById('findPeopleOverlay').style.display = 'none';
+  });
+
+  document.getElementById('findPeopleInput').addEventListener('input', renderFindPeopleList);
+
+  document.querySelectorAll('.settings-nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      const section = item.dataset.section;
+      const content = document.getElementById('settingsContent');
+      content.innerHTML = getSettingsHTML(section);
+      if (section === 'appearance') {
+        const toggle = document.getElementById('darkModeToggle');
+        if (toggle) {
+          toggle.addEventListener('click', () => {
+            const html = document.documentElement;
+            const current = html.getAttribute('data-theme');
+            html.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+          });
+        }
+      }
+    });
+  });
+
+
+  function getSettingsHTML(section) {
+    const sections = {
+    profile: `
+      <div class="settings-section-title">Profile</div>
+      <div class="settings-card">
+        <div style="padding:24px;text-align:center;">
+          <div class="avatar" style="width:92px;height:92px;margin:0 auto 12px;font-size:32px;">${currentUser ? getInitials(currentUser.displayName || currentUser.username) : 'U'}</div>
+          <div style="font-size:22px;font-weight:800;letter-spacing:-0.03em;">${currentUser?.displayName || currentUser?.username || 'User'}</div>
+          <div style="font-size:13px;color:var(--text-2);margin-top:4px;">${currentUser?.email || ''}</div>
+        </div>
+      </div>
+    `,
+    account: `
+      <div class="settings-section-title">Account</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">Username</div>
+            <div class="settings-row-sub">@${currentUser?.username || ''}</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">Session</div>
+            <div class="settings-row-sub">Active</div>
+          </div>
+          <button class="icon-btn" title="Logout" onclick="window.logout()" style="margin-left:auto;">
+            <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
+      </div>
+    `,
+    privacy: `
+      <div class="settings-section-title">Privacy</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">Last seen & online</div>
+            <div class="settings-row-sub">Everyone</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">Profile photo</div>
+            <div class="settings-row-sub">Everyone</div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">Read receipts</div>
+            <div class="settings-row-sub">On</div>
+          </div>
+          <div class="toggle on"></div>
+        </div>
+      </div>
+    `,
+    notifications: `
+      <div class="settings-section-title">Notifications</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">Message notifications</div>
+          </div>
+          <div class="toggle on"></div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">Group notifications</div>
+          </div>
+          <div class="toggle on"></div>
+        </div>
+      </div>
+    `,
+    appearance: `
+      <div class="settings-section-title">Appearance</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">Dark mode</div>
+            <div class="settings-row-sub">Reflects current theme</div>
+          </div>
+          <div class="toggle" id="darkModeToggle"></div>
+        </div>
+      </div>
+    `,
+    security: `
+      <div class="settings-section-title">Security</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">Security notifications</div>
+            <div class="settings-row-sub">On</div>
+          </div>
+          <div class="toggle on"></div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-icon"><svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <div class="settings-row-info">
+            <div class="settings-row-title">End-to-end encryption</div>
+            <div class="settings-row-sub">Verified</div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--text-3);margin-top:16px;line-height:1.5;">Messages are end-to-end encrypted. Only you and the person you're chatting with can read them.</p>
+    `
+  };
+  return sections[section] || '';
+  }
+
+  async function logout() {
+    if (!isMockMode) {
+      try {
+        await api('/api/auth/logout', { method: 'POST' });
+      } catch {}
+    }
+    sessionStorage.removeItem('chat_token');
+    window.location.href = '/landing.html';
+  }
+  window.logout = logout;
+
+  renderChatList();
+  initBackend();
+</script>
+</body>
+</html>

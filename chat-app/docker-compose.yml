@@ -1,83 +1,38 @@
-# Agent B — B4 deployment stack (unlock approved).
+# Simplified deployment stack for cloud platforms (Railway, Render, Fly.io)
 #
 # Prerequisites before `docker compose up`:
 #   1. Docker Desktop installed
-#   2. A .env file in THIS directory (repo root) with at least:
-#        DATABASE_URL=postgresql://...      (Neon/Supabase/etc.)
-#        JWT_SECRET=<32+ random chars>
-#      optional: GROQ_API_KEY, CHAT_ENCRYPTION_KEY, JWT_EXPIRES_IN,
-#                CORS_ORIGIN, BCRYPT_ROUNDS
+#   2. Environment variables set (see .env.example in chat-app/)
 #
-# ⚠️ Multi-instance honesty note: cross-replica socket fan-out requires the
-# Socket.IO Redis adapter inside server/index.js (Agent A follow-up to A2/A4).
-# Until that lands the stack runs fine, but clients connected to replica 1
-# will not receive events emitted on replica 2.
+# Usage:
+#   cp chat-app/.env.example .env
+#   # edit .env with your real values
+#   docker compose up --build -d
+#
+# For cloud deployments, just set the environment variables in your
+# platform dashboard and deploy - this Dockerfile + compose handles everything.
 
 services:
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
   app:
     build:
       context: .
-      dockerfile: deploy/Dockerfile
+      dockerfile: Dockerfile
     restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
     environment:
       NODE_ENV: production
       PORT: "3001"
-      REDIS_URL: redis://redis:6379
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (min 32 chars) in .env}
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (min 32 chars)}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       CHAT_ENCRYPTION_KEY: ${CHAT_ENCRYPTION_KEY:-}
-      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
-    expose:
-      - "3001" # internal only — nginx fronts the fleet on :8080
-    depends_on:
-      redis:
-        condition: service_healthy
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 25s
-
-  worker:
-    # Opt-in until Agent A lands server/worker.js (blocker A4):
-    #   docker compose --profile ai-worker up -d
-    profiles: ["ai-worker"]
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile
-    command: node worker.js
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      REDIS_URL: redis://redis:6379
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-    depends_on:
-      redis:
-        condition: service_healthy
-
-  nginx:
-    image: nginx:1.27-alpine
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-    volumes:
-      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      redis:
-        condition: service_healthy
-      app:
-        condition: service_started

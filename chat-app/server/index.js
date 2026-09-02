@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import path from 'path';
 import { encryptMessage, decryptMessage } from './lib/crypto.js';
 import { classifyPriority } from './lib/groq.js';
 import helmet from 'helmet';
@@ -32,10 +33,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https:", "wss:", "ws:", "http://localhost:5173"],
+       scriptSrc: ["'self'", "'unsafe-inline'"],
+       styleSrc: ["'self'", "'unsafe-inline'"],
+       imgSrc: ["'self'", "data:", "https:"],
+       connectSrc: ["'self'", "https:", "wss:", "ws:"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
@@ -65,6 +66,36 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/invite', inviteRoutes);
+
+// Serve static client files (built frontend from Dockerfile)
+app.use(express.static('public', { maxAge: '1y', etag: true }));
+
+app.get('/', (req, res) => {
+  res.json({ status: 'Chat server running' });
+});
+
+app.get('/health', async (req, res) => {
+  try {
+    await prisma.$queryRawUnsafe('SELECT 1');
+    res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
+  } catch (err) {
+    logger.error('Health check DB error', { error: err.message });
+    res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
+  }
+});
+
+// Catch-all: serve SPA index.html for client-side routes
+app.get('*', (req, res, next) => {
+  const isApi = req.path.startsWith('/api');
+  const isSocket = req.path.startsWith('/socket.io');
+  if (!isApi && !isSocket) {
+    return res.sendFile(path.resolve('public', 'index.html'));
+  }
+  next();
+});
+
+app.use(notFound);
+app.use(errorHandler);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -432,24 +463,6 @@ io.on('connection', (socket) => {
     const n = socket.user?.username;
     if (n) socket.to(room).emit('user_stop_typing', { nickname: n });
   });
-});
-
-// Encryption key is server-only — no longer exposed to clients.
-// Messages are decrypted server-side before being sent via socket.
-// The /api/get_key endpoint has been removed for security.
-
-app.get('/', (req, res) => {
-  res.json({ status: 'Chat server running' });
-});
-
-app.get('/health', async (req, res) => {
-  try {
-    await prisma.$queryRawUnsafe('SELECT 1');
-    res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
-  } catch (err) {
-    logger.error('Health check DB error', { error: err.message });
-    res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
-  }
 });
 
 app.use(notFound);

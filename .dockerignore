@@ -1,16 +1,39 @@
-# Keep the build context small AND secret-free.
+# Build context - keep minimal for faster Docker builds
+# Paths are relative to repo root (build context for Dockerfile)
 .git
+.gitignore
 .github
-client
+.github
+client/
+server/tmp
+server/logs
+*.db
+*.sqlite
+*.sqlite3
 k6
-deploy
-
-**/node_modules
+tests
+tools
+scripts
 **/.env
 **/.env.local
+**/.env.*.local
 **/dist
 **/*.log
-server/logs
-server/chat_app.db
-*.db
+**/*.log.*
+**/node_modules
+.vscode
+.idea
+.env
+.env.local
+Dockerfile
+docker-compose*.yml
+Caddyfile
+start-dev.bat
 nul
+chat-app/client/node_modules
+chat-app/server/node_modules
+chat-app/server/logs
+chat-app/k6
+chat-app/tests
+chat-app/tools
+chat-app/scripts

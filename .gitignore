@@ -38,3 +38,6 @@ coverage/
 # Misc
 *.tgz
 .cache/
+
+# Accidental artifacts (Windows reserved device names, command errors)
+nul

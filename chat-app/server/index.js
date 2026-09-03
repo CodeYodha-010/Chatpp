@@ -75,13 +75,30 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', async (req, res) => {
+  const checks = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '1.0.0',
+    uptime: Math.floor(process.uptime()),
+    environment: env.NODE_ENV,
+  };
+
   try {
     await prisma.$queryRawUnsafe('SELECT 1');
-    res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
+    checks.db = 'connected';
   } catch (err) {
     logger.error('Health check DB error', { error: err.message });
-    res.status(503).json({ status: 'error', db: 'disconnected', timestamp: new Date().toISOString() });
+    checks.db = 'disconnected';
+    checks.status = 'error';
   }
+
+  const hasEncryptionKey = !!process.env.CHAT_ENCRYPTION_KEY;
+  const hasGroqKey = !!process.env.GROQ_API_KEY;
+  checks.encryption = hasEncryptionKey ? 'persistent' : 'volatile (will not survive restart)';
+  checks.ai_classification = hasGroqKey ? 'enabled' : 'disabled';
+
+  const statusCode = checks.status === 'ok' ? 200 : 503;
+  res.status(statusCode).json(checks);
 });
 
 // Catch-all: serve SPA index.html for client-side routes

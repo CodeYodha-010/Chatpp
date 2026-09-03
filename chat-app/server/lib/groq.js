@@ -1,9 +1,24 @@
 import Groq from 'groq-sdk';
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+let groq = null;
+
+function getGroq() {
+  if (!groq) {
+    if (!process.env.GROQ_API_KEY) {
+      console.warn('[groq] GROQ_API_KEY not set — AI priority classification disabled');
+      return null;
+    }
+    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  }
+  return groq;
+}
 
 async function classifyPriority(message) {
   try {
-    const completion = await groq.chat.completions.create({
+    const client = getGroq();
+    if (!client) return 'fyi';
+
+    const completion = await client.chat.completions.create({
       messages: [
         {
           role: 'system',

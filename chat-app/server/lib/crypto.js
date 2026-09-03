@@ -19,6 +19,9 @@ if (!process.env[keyName]) {
     }
   }
   console.warn('CHAT_ENCRYPTION_KEY not set in .env. Using generated key (data will not persist across restarts).');
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('⚠️  WARNING: Set CHAT_ENCRYPTION_KEY in production! Without it, encrypted messages cannot be decrypted after a restart.');
+  }
 }
 
 const ENCRYPTION_KEY = process.env[keyName];

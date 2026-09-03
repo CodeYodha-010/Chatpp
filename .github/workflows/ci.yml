@@ -19,29 +19,29 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: |
-            client/package-lock.json
-            server/package-lock.json
+            chat-app/client/package-lock.json
+            chat-app/server/package-lock.json
 
       - name: Build client
-        working-directory: client
+        working-directory: chat-app/client
         run: |
           npm ci
           npm run build
 
       - name: Install server dependencies
-        working-directory: server
+        working-directory: chat-app/server
         run: npm ci
 
       - name: Syntax-check the API test suite
         run: |
-          node --check server/tests/helpers.js
-          node --check server/tests/auth.test.js
-          node --check server/tests/rooms.test.js
-          node --check server/tests/http.test.js
+          node --check chat-app/server/tests/helpers.js
+          node --check chat-app/server/tests/auth.test.js
+          node --check chat-app/server/tests/rooms.test.js
+          node --check chat-app/server/tests/http.test.js
 
       # Explicit file paths: `node --test <dir>/` is treated as a module
       # invocation on some Node versions (MODULE_NOT_FOUND in CI).
       # Suites self-skip when no database is configured, so this stays green
       # until a test DATABASE_URL secret is added.
       - name: Run API tests
-        run: node --test server/tests/auth.test.js server/tests/rooms.test.js server/tests/http.test.js
+        run: node --test chat-app/server/tests/auth.test.js chat-app/server/tests/rooms.test.js chat-app/server/tests/http.test.js

@@ -305,6 +305,54 @@ same table so the scaling story is documented with data._
 
 ---
 
+---
+
+## Production Deployment
+
+### Required Environment Variables
+
+| Variable | Required | Description | How to Generate |
+|----------|----------|-------------|-----------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string | From your DB provider (Supabase, Neon, etc.) |
+| `JWT_SECRET` | Yes | 32+ character random string | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `CHAT_ENCRYPTION_KEY` | Yes | 64-character hex key for AES-256-GCM | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `GROQ_API_KEY` | No | Groq API key for AI classification | https://console.groq.com (graceful fallback if missing) |
+| `CORS_ORIGIN` | Yes | Frontend URL(s), comma-separated | Your deployed frontend URL |
+| `REDIS_URL` | No | Redis connection for multi-instance | Upstash free tier or Redis Cloud |
+
+### Deployment Checklist
+
+- [ ] Set all **required** environment variables
+- [ ] Generate a **persistent** `CHAT_ENCRYPTION_KEY` (not the auto-generated one)
+- [ ] Configure `CORS_ORIGIN` to match your frontend domain
+- [ ] Set `NODE_ENV=production`
+- [ ] Verify database migrations run on startup (`prisma db push`)
+- [ ] Confirm `/health` endpoint returns 200 with DB connected
+
+### Quick Deploy (Docker)
+
+```bash
+# 1. Create .env file
+cp chat-app/server/.env.example chat-app/server/.env
+# Edit .env with your values
+
+# 2. Build and deploy
+docker compose up --build -d --scale app=2
+
+# 3. Verify
+curl http://localhost:8080/health
+```
+
+### Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `GroqError: GROQ_API_KEY missing` | Server crashes on startup | Set `GROQ_API_KEY` or the server will skip AI classification gracefully |
+| `CHAT_ENCRYPTION_KEY not set` | Random key generated | Set a persistent key or messages won't decrypt after restart |
+| `CORS errors` | Wrong `CORS_ORIGIN` | Set to your exact frontend URL |
+| `Database connection failed` | Wrong `DATABASE_URL` | Verify connection string and network access |
+
+
 ## License
 
 MIT

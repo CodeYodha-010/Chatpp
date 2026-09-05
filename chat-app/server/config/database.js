@@ -11,7 +11,7 @@ const prisma = new PrismaClient({
 });
 
 // Test connection with retry
-async function connectWithRetry(maxAttempts = 3, delayMs = 2000) {
+async function connectWithRetry(maxAttempts = 5, delayMs = 3000) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       await prisma.$connect();
@@ -20,6 +20,12 @@ async function connectWithRetry(maxAttempts = 3, delayMs = 2000) {
     } catch (err) {
       logger.error(`Database connection attempt ${attempt}/${maxAttempts} failed: ${err.message}`);
       if (attempt === maxAttempts) {
+        if (process.env.NODE_ENV === 'production') {
+          // In production, keep retrying indefinitely instead of crashing
+          logger.warn('Continuing to retry database connection in production mode');
+          setTimeout(() => connectWithRetry(Infinity, 5000), delayMs);
+          return;
+        }
         logger.error('All database connection attempts failed, exiting');
         process.exit(1);
       }

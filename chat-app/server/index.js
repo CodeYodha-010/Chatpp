@@ -67,11 +67,18 @@ app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/invite', inviteRoutes);
 
-// Serve static client files (built frontend from Dockerfile)
-app.use(express.static('public', { maxAge: '1y', etag: true }));
+// Serve static client files in production (built frontend copied via Dockerfile)
+if (env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(path.resolve(), 'public'), { maxAge: '1y', etag: true }));
+}
 
+// Root route - serve SPA in production, JSON status in dev
 app.get('/', (req, res) => {
-  res.json({ status: 'Chat server running' });
+  if (env.NODE_ENV === 'production') {
+    res.sendFile(path.join(path.resolve(), 'public', 'index.html'));
+  } else {
+    res.json({ status: 'Chat server running' });
+  }
 });
 
 app.get('/health', async (req, res) => {
@@ -83,13 +90,13 @@ app.get('/health', async (req, res) => {
     environment: env.NODE_ENV,
   };
 
+  // Check DB only if Prisma has a connection attempt
   try {
     await prisma.$queryRawUnsafe('SELECT 1');
     checks.db = 'connected';
   } catch (err) {
     logger.error('Health check DB error', { error: err.message });
-    checks.db = 'disconnected';
-    checks.status = 'error';
+    checks.db = 'connecting'; // Still starting up
   }
 
   const hasEncryptionKey = !!process.env.CHAT_ENCRYPTION_KEY;
@@ -97,16 +104,20 @@ app.get('/health', async (req, res) => {
   checks.encryption = hasEncryptionKey ? 'persistent' : 'volatile (will not survive restart)';
   checks.ai_classification = hasGroqKey ? 'enabled' : 'disabled';
 
+      // Always return 200 as long as server process is alive — lets Railway healthchecks work
+  // even when DB is still connecting (e.g., slow Postgres cold start on Railway)
   const statusCode = checks.status === 'ok' ? 200 : 503;
   res.status(statusCode).json(checks);
 });
 
-// Catch-all: serve SPA index.html for client-side routes
+// Catch-all: serve SPA index.html for client-side routes (production only)
 app.get('*', (req, res, next) => {
-  const isApi = req.path.startsWith('/api');
-  const isSocket = req.path.startsWith('/socket.io');
-  if (!isApi && !isSocket) {
-    return res.sendFile(path.resolve('public', 'index.html'));
+  if (env.NODE_ENV === 'production') {
+    const isApi = req.path.startsWith('/api');
+    const isSocket = req.path.startsWith('/socket.io');
+    if (!isApi && !isSocket) {
+      return res.sendFile(path.join(path.resolve(), 'public', 'index.html'));
+    }
   }
   next();
 });

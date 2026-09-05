@@ -343,6 +343,25 @@ docker compose up --build -d --scale app=2
 curl http://localhost:8080/health
 ```
 
+### One-Click Deploy on Railway
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template/V0wF0L?referralCode=Chatpp)
+
+1. Click the button above and connect your GitHub account.
+2. Railway auto-detects the root `Dockerfile` — no additional config needed.
+3. Add plugins:
+   - **PostgreSQL** (auto-sets `DATABASE_URL`)
+   - **Redis** (auto-sets `REDIS_URL`, optional but recommended for multi-instance)
+4. Set these environment variables in the Railway dashboard:
+
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` | 32+ chars |
+| `CHAT_ENCRYPTION_KEY` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` | **Must be persistent!** |
+| `CORS_ORIGIN` | `*` or your domain | Use `*` for quick deploy, your domain for production |
+
+5. Click **Deploy** — the server runs migrations automatically on startup.
+
 ### Troubleshooting
 
 | Problem | Cause | Fix |

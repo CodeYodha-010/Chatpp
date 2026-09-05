@@ -1,8 +1,7 @@
-# Build context - keep minimal for faster Docker builds
+﻿# Build context - keep minimal for faster Docker builds
 # Paths are relative to repo root (build context for Dockerfile)
 .git
 .gitignore
-.github
 .github
 client/
 server/tmp
@@ -17,19 +16,6 @@ scripts
 **/.env
 **/.env.local
 **/.env.*.local
-**/dist
-**/*.log
-**/*.log.*
-**/node_modules
-.vscode
-.idea
-.env
-.env.local
-Dockerfile
-docker-compose*.yml
-Caddyfile
-start-dev.bat
-nul
 chat-app/client/node_modules
 chat-app/server/node_modules
 chat-app/server/logs
@@ -37,3 +23,4 @@ chat-app/k6
 chat-app/tests
 chat-app/tools
 chat-app/scripts
+!chat-app/server/prisma

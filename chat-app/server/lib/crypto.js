@@ -1,27 +1,16 @@
 import crypto from 'crypto';
-import fs from 'fs';
 
-import path from 'path';
-const envPath = path.join(process.cwd(), '.env');
 const keyName = 'CHAT_ENCRYPTION_KEY';
 
-// On first run, generate and save key
+// Validate encryption key — required for consistent decryption across restarts in production
 if (!process.env[keyName]) {
-  const newKey = crypto.randomBytes(32).toString('hex');
-  process.env[keyName] = newKey;
-
-  // Append to .env if file exists
-  if (fs.existsSync(envPath)) {
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    if (!envContent.includes(keyName)) {
-      fs.appendFileSync(envPath, `\n${keyName}=${newKey}\n`);
-      console.log('Generated new CHAT_ENCRYPTION_KEY and saved to .env');
-    }
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL: CHAT_ENCRYPTION_KEY is not set in production.');
+    console.error('Set a 64-character hex key. Generate one with:');
+    console.error('node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+    process.exit(1);
   }
   console.warn('CHAT_ENCRYPTION_KEY not set in .env. Using generated key (data will not persist across restarts).');
-  if (process.env.NODE_ENV === 'production') {
-    console.warn('⚠️  WARNING: Set CHAT_ENCRYPTION_KEY in production! Without it, encrypted messages cannot be decrypted after a restart.');
-  }
 }
 
 const ENCRYPTION_KEY = process.env[keyName];

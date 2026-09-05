@@ -57,7 +57,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: env.CORS_ORIGIN.split(',').map(o => o.trim()),
+  origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',').map(o => o.trim()),
   credentials: true
 }));
 app.use(generalLimiter);
@@ -127,8 +127,8 @@ app.use(errorHandler);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: {
-    origin: env.CORS_ORIGIN.split(',').map(o => o.trim()),
+    cors: {
+    origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',').map(o => o.trim()),
     methods: ['GET', 'POST'],
     credentials: true
   },
@@ -506,8 +506,9 @@ for (const r of dbRooms) {
 }
 logger.info(`Loaded ${dbRooms.length} rooms from database`);
 
-const server = httpServer.listen(PORT, () => {
-  logger.info(`Server on port ${PORT}`);
+const HOST = process.env.HOST || '0.0.0.0';
+const server = httpServer.listen(PORT, HOST, () => {
+  logger.info(`Server on port ${PORT} (host: ${HOST})`);
   logger.info(`${env.NODE_ENV} | CORS: ${env.CORS_ORIGIN}`);
   logger.info(`DB: PostgreSQL (Prisma) | Auth: JWT ${env.JWT_EXPIRES_IN}`);
 });

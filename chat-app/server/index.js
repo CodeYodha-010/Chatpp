@@ -85,6 +85,17 @@ app.get('/', (req, res) => {
   }
 });
 
+app.get('/api/status', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '1.0.0',
+    environment: env.NODE_ENV,
+    memory: process.memoryUsage ? process.memoryUsage() : null
+  });
+});
+
 app.get('/health', async (req, res) => {
   const checks = {
     status: 'ok',

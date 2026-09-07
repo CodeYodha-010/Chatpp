@@ -29,6 +29,10 @@ import Message from './models/Message.js';
 import prisma from './config/database.js';
 
 const app = express();
+
+// Trust Render reverse proxy (required for rate limiting + IP detection)
+app.set('trust proxy', 1);
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {

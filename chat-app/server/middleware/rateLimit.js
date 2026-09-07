@@ -30,18 +30,27 @@ function limiterConfig(prefix, opts) {
 export const generalLimiter = rateLimit(limiterConfig('chatrl:general', {
   windowMs: env.RATE_LIMIT_WINDOW_MS,
   max: env.RATE_LIMIT_MAX,
-  message: { error: 'Too many requests, please try again later' }
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false }
 }));
 
 export const authLimiter = rateLimit(limiterConfig('chatrl:auth', {
   windowMs: 15 * 60 * 1000,
   max: 25,
   skipSuccessfulRequests: true,
-  message: { error: 'Too many authentication attempts, please try again later' }
+  message: { error: 'Too many authentication attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false }
 }));
 
 export const strictLimiter = rateLimit(limiterConfig('chatrl:strict', {
   windowMs: 60 * 1000,
   max: 10,
-  message: { error: 'Slow down' }
+  message: { error: 'Slow down' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false }
 }));

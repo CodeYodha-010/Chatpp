@@ -46,6 +46,18 @@ export function createRedisAdapter() {
   return createAdapter(pub, sub);
 }
 
+// Disconnect Redis client on shutdown
+export async function disconnectRedis() {
+  if (client) {
+    try {
+      await client.quit();
+      logger.info('Redis client disconnected');
+    } catch (e) {
+      logger.warn('Redis disconnect failed', { error: e.message });
+    }
+  }
+}
+
 // Explicitly connect all Redis clients (called after HTTP server starts)
 export async function connectRedis() {
   if (!client) return null;

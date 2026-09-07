@@ -17,7 +17,7 @@ import { authenticateHTTP, authenticateSocket } from './middleware/auth.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import requestLogger, { responseTime } from './middleware/requestLogger.js';
-import { setPresence, deletePresence, getOnlineUsers, createRedisAdapter, connectRedis } from './lib/redis.js';
+import { setPresence, deletePresence, getOnlineUsers, createRedisAdapter, connectRedis, disconnectRedis } from './lib/redis.js';
 import { enqueueClassification, subscribeToPriorities } from './lib/queue.js';
 import LRUCache from './lib/LRUCache.js';
 import authRoutes from './routes/auth.js';
@@ -551,6 +551,7 @@ const shutdown = async (signal) => {
   });
   server.close(async () => {
     await prisma.$disconnect();
+    disconnectRedis();
     logger.info('Server shut down');
     process.exit(0);
   });

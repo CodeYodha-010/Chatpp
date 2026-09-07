@@ -121,6 +121,9 @@ app.get('/health', async (req, res) => {
     checks.db = 'connecting'; // Still starting up
   }
 
+  // Redis status (if configured)
+  checks.redis = env.REDIS_URL ? 'configured' : 'not-configured';
+
   const hasEncryptionKey = !!process.env.CHAT_ENCRYPTION_KEY;
   const hasGroqKey = !!process.env.GROQ_API_KEY;
   checks.encryption = hasEncryptionKey ? 'persistent' : 'volatile (will not survive restart)';

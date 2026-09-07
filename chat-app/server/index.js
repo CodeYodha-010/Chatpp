@@ -526,6 +526,13 @@ logger.info(`Loaded ${dbRooms.length} rooms from database`);
 
 const server = httpServer.listen(PORT, HOST, () => {
   logger.info(`Server on port ${PORT} (host: ${HOST})`);
+  logger.info('------------------------------------------');
+  logger.info('  Continental Chat - Server Started');
+  logger.info(`  Environment: ${env.NODE_ENV}`);
+  logger.info(`  Health: /health	Status: /api/status`);
+  logger.info(`  Redis: ${env.REDIS_URL ? 'enabled' : 'disabled (in-memory)'}`);
+  logger.info(`  Groq AI: ${process.env.GROQ_API_KEY ? 'enabled' : 'disabled'}`);
+  logger.info('------------------------------------------');
   logger.info(`${env.NODE_ENV} | CORS: ${env.CORS_ORIGIN}`);
   logger.info(`DB: PostgreSQL (Prisma) | Auth: JWT ${env.JWT_EXPIRES_IN}`);
 });

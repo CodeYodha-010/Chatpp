@@ -16,7 +16,7 @@ import escapeHtml from './utils/sanitize.js';
 import { authenticateHTTP, authenticateSocket } from './middleware/auth.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
-import requestLogger from './middleware/requestLogger.js';
+import requestLogger, { responseTime } from './middleware/requestLogger.js';
 import { setPresence, deletePresence, getOnlineUsers, createRedisAdapter, connectRedis } from './lib/redis.js';
 import { enqueueClassification, subscribeToPriorities } from './lib/queue.js';
 import LRUCache from './lib/LRUCache.js';
@@ -65,6 +65,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(generalLimiter);
+app.use(responseTime);
 app.use(requestLogger);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

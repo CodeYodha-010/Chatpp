@@ -17,7 +17,7 @@ import { authenticateHTTP, authenticateSocket } from './middleware/auth.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import requestLogger from './middleware/requestLogger.js';
-import { setPresence, deletePresence, getOnlineUsers, createRedisAdapter } from './lib/redis.js';
+import { setPresence, deletePresence, getOnlineUsers, createRedisAdapter, connectRedis } from './lib/redis.js';
 import { enqueueClassification, subscribeToPriorities } from './lib/queue.js';
 import LRUCache from './lib/LRUCache.js';
 import authRoutes from './routes/auth.js';
@@ -163,18 +163,11 @@ io.engine.on('connection_error', (err) => {
     logger.error('Connection error context', { url: err.req.url, origin: err.req.headers?.origin });
   }
 });
-// Worker results arrive via Redis pub/sub: update the local room cache and
-// rebroadcast so every replica (and its clients) sees the final priority.
-subscribeToPriorities(({ msgId, room, priority }) => {
-  const arr = rooms[room];
-  if (arr) {
-    const idx = arr.findIndex((m) => m.id === msgId);
-    if (idx !== -1) arr[idx].priority = priority;
-  }
-  io.to(room).emit('priority_updated', { id: msgId, priority });
-});
 
-const PORT = env.PORT;
+const PORT = Number(process.env.PORT) || env.PORT || 3001;
+const HOST = "0.0.0.0";
+
+console.log("[STARTUP] Starting HTTP server on " + HOST + ":" + PORT);
 
 // Local per-instance state: room routing is inherently instance-local in
 // Socket.IO. The global online list lives in Redis (lib/redis.js) so every
@@ -506,12 +499,33 @@ for (const r of dbRooms) {
 }
 logger.info(`Loaded ${dbRooms.length} rooms from database`);
 
-const HOST = process.env.HOST || '0.0.0.0';
 const server = httpServer.listen(PORT, HOST, () => {
   logger.info(`Server on port ${PORT} (host: ${HOST})`);
   logger.info(`${env.NODE_ENV} | CORS: ${env.CORS_ORIGIN}`);
   logger.info(`DB: PostgreSQL (Prisma) | Auth: JWT ${env.JWT_EXPIRES_IN}`);
 });
+
+// AFTER server is listening, start background tasks (non-blocking)
+// so Redis connection failures don't prevent server startup
+(async () => {
+  if (env.REDIS_URL) {
+    try {
+      await connectRedis();
+    } catch (e) {
+      console.warn('[redis] Connection failed, continuing without Redis:', e.message);
+    }
+    subscribeToPriorities(({ msgId, room, priority }) => {
+      const arr = rooms[room];
+      if (arr) {
+        const idx = arr.findIndex((m) => m.id === msgId);
+        if (idx !== -1) arr[idx].priority = priority;
+      }
+      io.to(room).emit('priority_updated', { id: msgId, priority });
+    });
+  } else {
+    console.log('[priority-sub] REDIS_URL not set — priority classification disabled');
+  }
+})();
 
 // Graceful shutdown
 const shutdown = async (signal) => {

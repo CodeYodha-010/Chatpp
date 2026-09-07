@@ -8,15 +8,23 @@ import { getRedis } from '../lib/redis.js';
 // requires a distinct store instance + unique prefix per limiter.
 function limiterConfig(prefix, opts) {
   const client = getRedis();
-  if (!client) return opts;
-  console.log(`Rate limiting: distributed (Redis) [${prefix}]`);
-  return {
-    ...opts,
-    store: new RedisStore({
-      sendCommand: (...args) => client.call(...args),
-      prefix
-    })
-  };
+  if (!client) {
+    console.log(`Rate limiting: in-memory (no Redis) [${prefix}]`);
+    return opts;
+  }
+  try {
+    console.log(`Rate limiting: distributed (Redis) [${prefix}]`);
+    return {
+      ...opts,
+      store: new RedisStore({
+        sendCommand: (...args) => client.call(...args),
+        prefix
+      })
+    };
+  } catch (e) {
+    console.warn(`Rate limiting: Redis failed, falling back to memory [${prefix}]`, e.message);
+    return opts;
+  }
 }
 
 export const generalLimiter = rateLimit(limiterConfig('chatrl:general', {

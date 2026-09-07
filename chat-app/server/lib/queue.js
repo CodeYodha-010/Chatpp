@@ -15,7 +15,7 @@ const JOB_OPTS = {
 // subscriber, worker) - BullMQ needs maxRetriesPerRequest:null and blocking
 // reads; sharing the presence client would starve it.
 function conn() {
-  return new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  return new Redis(env.REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true });
 }
 
 let queue = null;
@@ -47,18 +47,23 @@ export function publishPriority(payload) {
 
 export function subscribeToPriorities(handler) {
   if (!env.REDIS_URL) return null;
-  const sub = conn();
-  sub.on('error', (e) => console.error('[priority-sub] error:', e.message));
-  sub.subscribe(PRIORITY_CHANNEL)
-    .then(() => console.log(`[priority-sub] listening on ${PRIORITY_CHANNEL}`))
-    .catch((e) => console.error('[priority-sub] subscribe failed:', e.message));
-  sub.on('message', (channel, raw) => {
-    if (channel !== PRIORITY_CHANNEL) return;
-    try {
-      handler(JSON.parse(raw));
-    } catch (e) {
-      console.error('[priority-sub] bad payload:', e.message);
-    }
-  });
-  return sub;
+  try {
+    const sub = conn();
+    sub.on('error', (e) => console.error('[priority-sub] error:', e.message));
+    sub.subscribe(PRIORITY_CHANNEL)
+      .then(() => console.log(`[priority-sub] listening on ${PRIORITY_CHANNEL}`))
+      .catch((e) => console.error('[priority-sub] subscribe failed:', e.message));
+    sub.on('message', (channel, raw) => {
+      if (channel !== PRIORITY_CHANNEL) return;
+      try {
+        handler(JSON.parse(raw));
+      } catch (e) {
+        console.error('[priority-sub] bad payload:', e.message);
+      }
+    });
+    return sub;
+  } catch (e) {
+    console.error('[priority-sub] connection failed:', e.message);
+    return null;
+  }
 }

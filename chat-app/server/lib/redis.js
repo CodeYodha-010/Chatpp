@@ -24,7 +24,7 @@ const mem = {
 };
 
 if (env.REDIS_URL) {
-  client = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3, lazyConnect: false });
+  client = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 3, lazyConnect: true });
   client.on('error', (e) => logger.error('Redis error', { error: e.message }));
   client.on('connect', () => {
     const safe = env.REDIS_URL.replace(/\/\/[^@]*@/, '//***@');
@@ -40,10 +40,22 @@ export function getRedis() {
 // cannot run regular commands, so they must not share the presence client.
 export function createRedisAdapter() {
   if (!env.REDIS_URL) return null;
-  const pub = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  const pub = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true });
   const sub = pub.duplicate();
   pub.on('error', (e) => logger.error('Redis adapter error', { error: e.message }));
   return createAdapter(pub, sub);
+}
+
+// Explicitly connect all Redis clients (called after HTTP server starts)
+export async function connectRedis() {
+  if (!client) return null;
+  try {
+    await client.connect();
+    logger.info('Redis presence client connected');
+  } catch (e) {
+    logger.warn('Redis presence client connection failed', { error: e.message });
+  }
+  return client;
 }
 
 export async function setPresence(socketId, data) {

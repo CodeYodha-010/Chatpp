@@ -12,6 +12,9 @@ const envSchema = Joi.object({
   DATABASE_URL: isProduction
     ? Joi.string().required()
     : Joi.string().default('postgresql://postgres:password@localhost:5432/chatdb?schema=public'),
+  // DIRECT_URL: used by Prisma Migrate / db push. On Neon this MUST be the direct
+  // (non-pooler) URL. Falls back to DATABASE_URL when unset.
+  DIRECT_URL: Joi.string().allow('').optional(),
   CORS_ORIGIN: Joi.string().custom((value) => {
     // Support comma-separated list in production
     const origins = value.split(',').map(o => o.trim());
@@ -45,5 +48,9 @@ if (isProduction) {
     console.warn('[config] REDIS_URL not set — using in-memory presence (single instance only).');
   }
 }
+
+// Ensure DIRECT_URL always exists for Prisma (schema.prisma references it).
+// Falls back to DATABASE_URL when unset — same value works for local/dev.
+process.env.DIRECT_URL = process.env.DIRECT_URL || process.env.DATABASE_URL;
 
 export default env;

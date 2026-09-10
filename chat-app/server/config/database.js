@@ -3,45 +3,56 @@ import logger from '../utils/logger.js';
 
 const prisma = new PrismaClient({
   log: ['error', 'warn'],
-  // Increase timeouts to handle Neon free-tier cold starts
   transactionOptions: {
     maxWait: 30000,
     timeout: 30000,
   },
 });
 
-// Test connection with retry
-async function connectWithRetry(maxAttempts = 5, delayMs = 3000) {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+let dbConnected = false;
+export function isDbConnected() { return dbConnected; }
+
+let retryCount = 0;
+export async function connectWithRetry() {
+  while (true) {
     try {
       await prisma.$connect();
-      logger.info(`Database connected via Prisma (attempt ${attempt}/${maxAttempts})`);
+      dbConnected = true;
+      logger.info('Database connected via Prisma');
+      retryCount = 0;
+      startKeepAlive();
       return;
     } catch (err) {
-      logger.error(`Database connection attempt ${attempt}/${maxAttempts} failed: ${err.message}`);
-      if (attempt === maxAttempts) {
-        if (process.env.NODE_ENV === 'production') {
-          // In production, keep retrying indefinitely instead of crashing
-          logger.warn('Continuing to retry database connection in production mode');
-          setTimeout(() => connectWithRetry(Infinity, 5000), delayMs);
-          return;
-        }
-        logger.error('All database connection attempts failed, exiting');
-        process.exit(1);
-      }
-      await new Promise(resolve => setTimeout(resolve, delayMs));
+      retryCount++;
+      dbConnected = false;
+      const msg = err.message || String(err);
+      logger.warn('DB connect failed, retrying');
+      const delay = Math.min(5000 * Math.pow(1.5, Math.min(retryCount, 6)), 60000);
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
 }
 
-await connectWithRetry();
+connectWithRetry();
 
-// Graceful shutdown
+let keepAliveStarted = false;
+function startKeepAlive() {
+  if (keepAliveStarted) return;
+  keepAliveStarted = true;
+  setInterval(async () => {
+    try {
+      await prisma.$queryRawUnsafe('SELECT 1');
+    } catch (err) {
+      dbConnected = false;
+      logger.warn('Keep-alive failed');
+    }
+  }, 4 * 60 * 1000);
+}
+
 process.on('beforeExit', async () => {
   await prisma.$disconnect();
 });
 
-// Session cleanup: run on startup + every 24 hours
 async function cleanupExpiredSessions() {
   try {
     const { count } = await prisma.session.deleteMany({
@@ -50,14 +61,12 @@ async function cleanupExpiredSessions() {
     if (count > 0) {
       logger.info(`Cleaned up ${count} expired sessions`);
     }
-    return count;
   } catch (err) {
-    logger.error('Session cleanup failed', { error: err.message });
-    return 0;
+    logger.error('Session cleanup failed');
   }
 }
 
-await cleanupExpiredSessions();
+setTimeout(cleanupExpiredSessions, 10000);
 setInterval(cleanupExpiredSessions, 24 * 60 * 60 * 1000);
 
 export default prisma;

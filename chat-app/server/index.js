@@ -515,15 +515,7 @@ io.on('connection', (socket) => {
 app.use(notFound);
 app.use(errorHandler);
 
-seedDatabase().catch(e => logger.error('Seed failed', e));
 
-// Load existing rooms from DB into memory
-const dbRooms = await prisma.room.findMany({ where: { isArchived: false }, select: { name: true } });
-for (const r of dbRooms) {
-  if (!roomNames.includes(r.name)) roomNames.push(r.name);
-  if (!rooms[r.name]) rooms[r.name] = [];
-}
-logger.info(`Loaded ${dbRooms.length} rooms from database`);
 
 const server = httpServer.listen(PORT, HOST, () => {
   logger.info(`Server on port ${PORT} (host: ${HOST})`);
@@ -538,54 +530,21 @@ const server = httpServer.listen(PORT, HOST, () => {
   logger.info(`DB: PostgreSQL (Prisma) | Auth: JWT ${env.JWT_EXPIRES_IN}`);
 });
 
-// AFTER server is listening, start background tasks (non-blocking)
-// so Redis connection failures don't prevent server startup
+
+// Load rooms from DB in background (non-blocking)
 (async () => {
-  if (env.REDIS_URL) {
-    try {
-      await connectRedis();
-    } catch (e) {
-      console.warn('[redis] Connection failed, continuing without Redis:', e.message);
+  try {
+    await seedDatabase();
+    const dbRooms = await prisma.room.findMany({ where: { isArchived: false }, select: { name: true } });
+    for (const r of dbRooms) {
+      if (!roomNames.includes(r.name)) roomNames.push(r.name);
+      if (!rooms[r.name]) rooms[r.name] = [];
     }
-    subscribeToPriorities(({ msgId, room, priority }) => {
-      const arr = rooms[room];
-      if (arr) {
-        const idx = arr.findIndex((m) => m.id === msgId);
-        if (idx !== -1) arr[idx].priority = priority;
-      }
-      io.to(room).emit('priority_updated', { id: msgId, priority });
-    });
-  } else {
-    console.log('[priority-sub] REDIS_URL not set — priority classification disabled');
+    logger.info(`Loaded ${dbRooms.length} rooms from database`);
+  } catch (e) {
+    logger.error('Background room load failed', { error: e.message });
   }
 })();
 
-// Graceful shutdown
-const shutdown = async (signal) => {
-  logger.info(`Received ${signal}, shutting down gracefully`);
-  io.close(() => {
-    logger.info('Socket.IO closed');
-  });
-  server.close(async () => {
-    await prisma.$disconnect();
-    disconnectRedis();
-    logger.info('Server shut down');
-    process.exit(0);
-  });
-  setTimeout(() => {
-    logger.error('Force shutting down');
-    process.exit(1);
-  }, 10000);
-};
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
 
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection', { reason: reason?.message || String(reason), stack: reason?.stack });
-});
-
-process.on('uncaughtException', (err) => {
-  logger.error('Uncaught Exception', { error: err.message, stack: err.stack });
-  shutdown('uncaughtException');
-});

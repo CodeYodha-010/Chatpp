@@ -37,11 +37,16 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-       scriptSrc: ["'self'", "'unsafe-inline'"],
-       styleSrc: ["'self'", "'unsafe-inline'"],
-       imgSrc: ["'self'", "data:", "https:"],
-       connectSrc: ["'self'", "https:", "wss:", "ws:"],
-      fontSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https:", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: [
+        "'self'",
+        "https://chatpp-6zzn.onrender.com",
+        "wss://chatpp-6zzn.onrender.com",
+        "https:", "wss:", "ws:"
+      ],
+      fontSrc: ["'self'", "data:", "https:", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
       baseUri: ["'self'"]

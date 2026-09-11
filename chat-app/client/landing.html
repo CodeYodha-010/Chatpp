@@ -889,7 +889,8 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 /* ---------- auth hand-off ---------- */
 function launchApp(email) {
   try { if (email) localStorage.setItem('continental_email', email); } catch {}
-  window.location.href = window.location.origin + '/vibe.html';
+  const query = email ? `?enter=1&email=${encodeURIComponent(email)}` : '?enter=1';
+  window.location.href = window.location.origin + '/' + query;
 }
 document.querySelectorAll('[data-launch]').forEach(el => {
   el.addEventListener('click', (e) => {

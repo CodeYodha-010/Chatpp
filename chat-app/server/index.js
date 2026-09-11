@@ -86,7 +86,15 @@ app.use('/api/invite', inviteRoutes);
 
 // Serve static client files in production (built frontend copied via Dockerfile)
 if (env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(path.resolve(), 'public'), { maxAge: '1y', etag: true }));
+  app.use(express.static(path.join(path.resolve(), 'public'), {
+    maxAge: '1y',
+    etag: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      }
+    }
+  }));
 }
 
 // Root route - serve SPA in production, JSON status in dev

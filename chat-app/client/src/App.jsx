@@ -96,6 +96,9 @@ function App() {
       setTypingUsers([]);
     });
     socket.on('new_message', (message) => setMessages(prev => [...prev, message]));
+    socket.on('new_messages_batch', (batch) => {
+      setMessages(prev => [...prev, ...batch]);
+    });
     socket.on('message_delivered', (data) => {
       setMessages(prev => prev.map(msg =>
         msg.id === data.id ? { ...msg, status: 'delivered' } : msg
@@ -124,6 +127,7 @@ function App() {
       socket.off('room_created');
       socket.off('room_joined');
       socket.off('new_message');
+      socket.off('new_messages_batch');
       socket.off('message_delivered');
       socket.off('priority_updated');
       socket.off('user_typing');

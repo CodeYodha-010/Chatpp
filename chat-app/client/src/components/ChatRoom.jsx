@@ -38,6 +38,14 @@ function formatDateLabel(ts) {
   return date.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
+function shouldGroup(msg, prev) {
+  if (!prev) return false;
+  if (prev.nickname !== msg.nickname) return false;
+  const diff = msg.timestamp - prev.timestamp;
+  if (diff > 5 * 60 * 1000) return false;
+  return true;
+}
+
 const MessageItem = memo(({ msg, prev, idx, nickname }) => {
   const grouped = shouldGroup(msg, prev);
   const isOwn = msg.nickname === nickname;
@@ -93,16 +101,6 @@ function ChatRoom({ currentRoom, messages, nickname, typingUsers }) {
   const handleSend = (text) => {
     socket.emit('send_message', { room: currentRoom, message: text, nickname });
   };
-
-  const shouldGroup = (msg, prev) => {
-    if (!prev) return false;
-    if (prev.nickname !== msg.nickname) return false;
-    const diff = msg.timestamp - prev.timestamp;
-    if (diff > 5 * 60 * 1000) return false;
-    return true;
-  };
-
-  const lastDateRef = useRef(null);
 
   return (
     <div className="chat-main">

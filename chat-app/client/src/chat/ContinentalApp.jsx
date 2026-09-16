@@ -307,6 +307,21 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
                 <button type="button" className="ct-ghost danger wide" onClick={onLogout}><LogOut size={15} /> Sign out</button>
               </div>
             )}
+            {panel === 'profile' && selUser && (
+              <div className="ct-prof">
+                <Av name={nameOf(selUser)} size={76} online={isOnlineU(selUser)} />
+                <span className={'ct-pill' + (isOnlineU(selUser) ? ' on' : '')}><span className="ct-dot" />{isOnlineU(selUser) ? 'Online' : 'Offline'}</span>
+                <h3>{nameOf(selUser)}</h3>
+                <p className="ct-muted">@{selUser.username}</p>
+                <p className="ct-email"><Mail size={13} /> {selUser.email || 'No email on file'}</p>
+                <div className="ct-facts">
+                  <div><span><Clock size={13} /> Last active</span><b>{isOnlineU(selUser) ? 'Now' : relTime(selUser.lastLoginAt ? new Date(selUser.lastLoginAt).getTime() : 0)}</b></div>
+                  <div><span><Monitor size={13} /> Status</span><b>{isOnlineU(selUser) ? 'Online' : 'Offline'}</b></div>
+                </div>
+                <button type="button" className="ct-btn wide" onClick={() => { setPanel(null); setSelUser(null); }}>Message</button>
+                <button type="button" className="ct-ghost wide" onClick={() => { setPanel(null); setSelUser(null); }}>Back to people</button>
+              </div>
+            )}
             {panel === 'settings' && (
               <div className="ct-set">
                 <div className="ct-acct">
@@ -331,6 +346,26 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
                   <li><span>Close</span><kbd>Esc</kbd></li>
                 </ul>
                 <button type="button" className="ct-ghost danger wide" onClick={onLogout}><LogOut size={15} /> Sign out</button>
+              </div>
+            )}
+            {panel === 'people' && (
+              <div className="ct-pplw">
+                <p className="ct-muted">{allUsers.length} members · {onlineUsers.length} online</p>
+                <label className="ct-srch sm"><Search size={14} />
+                  <input type="search" placeholder="Search people" value={pplSearch} onChange={(e) => setPplSearch(e.target.value)} aria-label="Search people" />
+                </label>
+                <ul className="ct-ppl">
+                  {shownUsers.map((u) => (
+                    <li key={u.id}>
+                      <button type="button" className="ct-pplbtn" onClick={() => { setSelUser(u); setPanel('profile'); }}>
+                        <Av name={nameOf(u)} size={34} online={isOnlineU(u)} />
+                        <span className="ct-pplm"><strong>{nameOf(u)}</strong><small>@{u.username} · {isOnlineU(u) ? 'Online' : 'Offline'}</small></span>
+                      </button>
+                    </li>
+                  ))}
+                  {shownUsers.length === 0 && <li className="ct-muted">{allUsers.length === 0 ? 'Loading members…' : 'No matches'}</li>}
+                </ul>
+                <button type="button" className="ct-btn wide" onClick={inviteFriend}><UserPlus size={15} /> Invite teammate</button>
               </div>
             )}
 

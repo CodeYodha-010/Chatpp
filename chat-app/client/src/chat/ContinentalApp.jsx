@@ -280,6 +280,63 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
           )}
         </div>
       </main>
+      {panel && (
+        <div className="ct-bd" onClick={() => { setPanel(null); setSelUser(null); }}>
+          <aside className="ct-dr" role="dialog" aria-modal="true" aria-label={panel} onClick={(e) => e.stopPropagation()}>
+            <div className="ct-ph"><h2>{panel === 'notify' ? 'Notifications' : panel.charAt(0).toUpperCase() + panel.slice(1)}</h2>
+              <IB label={'Close ' + panel} onClick={() => { setPanel(null); setSelUser(null); }}><X size={16} /></IB>
+            </div>
+            {panel === 'profile' && !selUser && (
+              <div className="ct-prof">
+                <Av name={displayName} size={76} />
+                <span className="ct-pill on"><span className="ct-dot" />Online</span>
+                <h3>{displayName}</h3>
+                <p className="ct-muted">@{user?.username || 'you'}</p>
+                <p className="ct-email"><Mail size={13} /> {myEmail || 'No email on file'}</p>
+                <div className="ct-facts">
+                  <div><span><MapPin size={13} /> Location</span><b>—</b></div>
+                  <div><span><Clock size={13} /> Time zone</span><b>—</b></div>
+                  <div><span><Monitor size={13} /> Status</span><b>Online</b></div>
+                </div>
+                <div className="ct-stats">
+                  <div><b>{rooms.length}</b><span>Rooms</span></div>
+                  <div><b>{onlineUsers.length}</b><span>Online</span></div>
+                  <div><b>{messages.length}</b><span>Messages</span></div>
+                </div>
+                <button type="button" className="ct-btn wide" onClick={() => setPanel('settings')}>Edit profile</button>
+                <button type="button" className="ct-ghost danger wide" onClick={onLogout}><LogOut size={15} /> Sign out</button>
+              </div>
+            )}
+            {panel === 'settings' && (
+              <div className="ct-set">
+                <div className="ct-acct">
+                  <Av name={displayName} size={44} />
+                  <div><b>{displayName}</b><small><Mail size={12} /> {myEmail || 'No email on file'}</small></div>
+                </div>
+                <h3>Appearance</h3>
+                <div className="ct-seg" role="radiogroup" aria-label="Theme">
+                  <button type="button" role="radio" aria-checked={dark} className={dark ? 'on' : ''} onClick={() => setDark(true)}>Dark</button>
+                  <button type="button" role="radio" aria-checked={!dark} className={!dark ? 'on' : ''} onClick={() => setDark(false)}>Light</button>
+                </div>
+                <label className="ct-toggle"><span>Compact mode</span>
+                  <button type="button" role="switch" aria-checked={compact} className={'ct-sw' + (compact ? ' on' : '')} onClick={() => setCompact((c) => !c)}><span /></button>
+                </label>
+                <label className="ct-toggle"><span>Mute typing indicators</span>
+                  <button type="button" role="switch" aria-checked={muted} className={'ct-sw' + (muted ? ' on' : '')} onClick={() => setMuted((m) => !m)}><span /></button>
+                </label>
+                <h3>Shortcuts</h3>
+                <ul className="ct-keys">
+                  <li><span>Send</span><kbd>Enter</kbd></li>
+                  <li><span>New line</span><kbd>Shift+Enter</kbd></li>
+                  <li><span>Close</span><kbd>Esc</kbd></li>
+                </ul>
+                <button type="button" className="ct-ghost danger wide" onClick={onLogout}><LogOut size={15} /> Sign out</button>
+              </div>
+            )}
+
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

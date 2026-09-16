@@ -12,6 +12,14 @@ import './continental.css';
 function ini(n) {
   return String(n || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
+function LogoMark({ size = 20 }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" width={size} height={size}>
+      <path d="M2.5 9c2.5 0 2.5 4.2 5 4.2S10 9 12 9s2.5 4.2 5 4.2S19.5 9 21.5 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M2.5 15c2.5 0 2.5 4.2 5 4.2S10 15 12 15s2.5 4.2 5 4.2S19.5 15 21.5 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity="0.5" />
+    </svg>
+  );
+}
 function Av({ name, size, online }) {
   return (
     <span className="ct-avw" style={{ width: size, height: size }}>
@@ -184,7 +192,7 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
   return (
     <div className={'ct-shell' + (compact ? ' compact' : '')}>
       <nav className="ct-rail" aria-label="Primary">
-        <div className="ct-logo" title="Continental" aria-label="Continental home">C</div>
+        <div className="ct-logo" title="Continental" aria-label="Continental home"><LogoMark size={21} /></div>
         <div className="ct-rail-group">
           {NAV.map(({ id, label, Ic }) => (
             <IB key={id} label={label} active={section === id}

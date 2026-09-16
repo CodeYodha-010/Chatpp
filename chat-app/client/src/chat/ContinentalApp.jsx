@@ -368,7 +368,41 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
                 <button type="button" className="ct-btn wide" onClick={inviteFriend}><UserPlus size={15} /> Invite teammate</button>
               </div>
             )}
-
+            {panel === 'notify' && (
+              <div className="ct-notw">
+                <div className="ct-nothead">
+                  <p className="ct-muted">{unreadNotif} unread</p>
+                  <button type="button" className="ct-link" onClick={() => setNotif((p) => p.map((n) => ({ ...n, read: true })))}>Mark all read</button>
+                </div>
+                {notif.length === 0 && <p className="ct-muted">You are all caught up.</p>}
+                <ul className="ct-not">
+                  {notif.map((n) => (
+                    <li key={n.id}>
+                      <button type="button" className={'ct-notbtn' + (n.read ? '' : ' unread')} onClick={() => setNotif((p) => p.map((x) => (x.id === n.id ? { ...x, read: true } : x)))}>
+                        <Av name={n.from} size={32} />
+                        <span><strong>{n.from}</strong><small>{n.text}</small><time>{relTime(n.ts)}</time></span>
+                        {!n.read && <span className="ct-undot" />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {panel === 'details' && (
+              <div className="ct-det">
+                <h3>About #{currentRoom}</h3>
+                <p className="ct-muted">{messages.length} messages · live via Socket.IO</p>
+                <h3>Members ({onlineUsers.length} online)</h3>
+                <ul className="ct-ppl">
+                  {onlineUsers.slice(0, 8).map((u, i) => (
+                    <li key={i}><Av name={u.nickname} size={30} online /><span>{u.nickname}</span></li>
+                  ))}
+                  {onlineUsers.length === 0 && <li className="ct-muted">No one online right now</li>}
+                </ul>
+                <button type="button" className={'ct-ghost wide' + (muted ? ' on' : '')} aria-pressed={muted} onClick={() => setMuted((m) => !m)}><VolumeX size={15} /> {muted ? 'Unmute' : 'Mute'}</button>
+                <button type="button" className="ct-ghost wide"><Archive size={15} /> Archive</button>
+              </div>
+            )}
           </aside>
         </div>
       )}

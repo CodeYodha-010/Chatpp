@@ -162,3 +162,27 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+/* ---- micro-motion layer (append) ---- */
+.ct-logo { transition: transform 180ms var(--ease-spring), border-color 150ms ease, color 150ms ease; cursor: pointer; }
+.ct-logo:hover { transform: translateY(-1px) scale(1.05); border-color: var(--border-accent); color: var(--accent); }
+.ct-logo:active { transform: scale(.94); }
+.ct-av { transition: transform 160ms var(--ease-spring); }
+a.ct-room:hover .ct-av, .ct-pplbtn:hover .ct-av { transform: scale(1.07); }
+.ct-ib { transition: background 130ms ease, color 130ms ease, border-color 130ms ease, transform 160ms var(--ease-spring); }
+.ct-ib:active { transform: scale(.88); }
+.ct-ib.on { animation: ctPop 220ms var(--ease-spring); }
+@keyframes ctPop { 0% { transform: scale(.84); } 60% { transform: scale(1.09); } 100% { transform: scale(1); } }
+.ct-room { transition: background 130ms ease, transform 160ms var(--ease-spring), border-color 130ms ease; }
+.ct-room:hover { transform: translateX(2px); }
+.ct-room:active { transform: translateX(2px) scale(.99); }
+.ct-room.on { animation: ctPop 220ms var(--ease-spring); }
+.ct-send, .ct-btn { transition: transform 150ms var(--ease-spring), filter 150ms ease; }
+.ct-send:active, .ct-btn:active { transform: scale(.94); }
+.ct-b { transition: transform 140ms ease; }
+.ct-m.own .ct-b:hover { transform: translateY(-1px); }
+.ct-ghost, .ct-pplbtn, .ct-notbtn, .ct-seg button, .ct-sw { transition: background 140ms ease, transform 150ms var(--ease-spring), border-color 140ms ease; }
+.ct-ghost:active, .ct-pplbtn:active, .ct-notbtn:active { transform: scale(.98); }
+.ct-on { animation: ctPulse 2.4s ease-in-out infinite; }
+@keyframes ctPulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(16 185 129 / 45%); } 50% { box-shadow: 0 0 0 4px rgb(16 185 129 / 0%); } }
+.ct-typing .ct-dots span { animation-duration: .9s; }
+.ct-dr { animation-duration: 220ms; }

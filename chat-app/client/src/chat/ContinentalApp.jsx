@@ -23,7 +23,7 @@ function LogoMark({ size = 20 }) {
 function Av({ name, size, online }) {
   return (
     <span className="ct-avw" style={{ width: size, height: size }}>
-      <span className="ct-av" style={{ width: size, height: size, fontSize: '0.36em', background: getAvatarColor(name) }}>{ini(name)}</span>
+      <span className="ct-av" style={{ width: size, height: size, fontSize: Math.max(13, Math.round(size * 0.42)), background: getAvatarColor(name) }}>{ini(name)}</span>
       {online !== undefined && <span className={online ? 'ct-on' : 'ct-off'} />}
     </span>
   );

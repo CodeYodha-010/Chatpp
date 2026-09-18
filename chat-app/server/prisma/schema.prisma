@@ -25,6 +25,7 @@ model User {
   messages    Message[]
   sessions    Session[]
   auditLogs   AuditLog[]
+  reactions   Reaction[]
 
   @@map("users")
 }
@@ -78,10 +79,28 @@ model Message {
   user   User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   parent Message? @relation("MessageReplies", fields: [parentId], references: [id])
   replies Message[] @relation("MessageReplies")
+  reactions Reaction[]
 
   @@index([roomId, createdAt])
   @@index([priority])
   @@map("messages")
+}
+
+// One row per (user, message, emoji) — a UNIQUE constraint there makes the
+// toggle a single upsert/delete and guarantees no duplicate reactions.
+model Reaction {
+  id        Int      @id @default(autoincrement())
+  messageId Int      @map("message_id")
+  userId    Int      @map("user_id")
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("reactions")
 }
 
 model Session {

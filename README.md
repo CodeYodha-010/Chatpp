@@ -268,6 +268,22 @@ node --env-file=.env tests/cleanup.js --apply    # optional: delete generated te
 - Without a reachable server or `DATABASE_URL`, every suite **self-skips** (CI-safe).
 - See [`server/tests/README.md`](server/tests/README.md) for the full guide, including rate-limit caveats.
 
+### Client — lint & unit tests
+
+The client has an ESLint flat config (`eslint.config.js`) with `no-undef` and
+react-hooks rules, plus a pure-logic unit suite on Node's built-in test runner
+— same convention as the server, no extra framework dependency.
+
+```bash
+cd client
+npm run lint    # static checks: undefined vars, hook misuse, etc.
+npm run test    # node --test tests/emojiInsertion.test.js (emoji caret/limit logic)
+npm run build   # production bundle
+```
+
+CI (`.github/workflows/ci.yml`) runs all three on every push/PR to `main`, so
+an undeclared variable or a broken build can no longer land silently.
+
 ---
 
 ## Load Testing (Baseline)

@@ -9,9 +9,12 @@ function AuthPage({ onAuthSuccess }) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // One-time prefill from ?email= — runs on mount, before the form is visible,
+  // so the synchronous setState here is intentional.
   useEffect(() => {
     const prefill = new URLSearchParams(window.location.search).get('email');
     if (prefill) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-time URL prefill
       setForm(prev => ({ ...prev, email: prefill }));
       setView('login');
     }

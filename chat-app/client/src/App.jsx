@@ -44,7 +44,12 @@ function Shell() {
       setLoading(false);
     };
     initAuth();
-  }, []);
+  // Auth bootstrap runs once on mount. `navigate` is deliberately absent from the
+  // dependency array: react-router rebuilds it on every navigation (its useCallback
+  // deps include `locationPathname`), so listing it would re-run the /api/auth/me +
+  // user_join bootstrap on every route change — and this effect itself calls
+  // navigate(), which would keep retriggering it.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     let n = 0;
     const onErr = (err) => {
@@ -73,7 +78,7 @@ function Shell() {
     try {
       const t = sessionStorage.getItem('chat_token');
       if (t) await apiPost('/api/auth/logout', {}, t);
-    } catch {}
+    } catch { /* logout is best-effort — the local session is cleared below regardless */ }
     sessionStorage.removeItem('chat_token');
     setUser(null); setNickname('');
     socket.disconnect();

@@ -22,10 +22,12 @@ jobs:
             client/package-lock.json
             server/package-lock.json
 
-      - name: Build client
+      - name: Lint, test and build client
         working-directory: client
         run: |
           npm ci
+          npm run lint
+          npm run test
           npm run build
 
       - name: Install server dependencies

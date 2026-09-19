@@ -24,7 +24,9 @@ let seq = 0;
 /** Collision-free email (Joi .email()). */
 export function uniqueEmail(prefix = 'agb') {
   seq += 1;
-  return `${prefix}.${Date.now()}.${seq}${Math.floor(Math.random() * 90 + 10)}@example.com`;
+// NOTE: @example.com / @example.org are on the server's disposable-email
+// blocklist, so registrations would 400. example.dev passes the filter.
+  return `${prefix}.${Date.now()}.${seq}${Math.floor(Math.random() * 90 + 10)}@example.dev`;
 }
 
 /**
@@ -44,13 +46,13 @@ export function makeUser(prefix = 'agb') {
 }
 
 /**
- * Lazily import supertest, bound to BASE_URL.
+ * Lazily import supertest. Callers bind it themselves with request(BASE_URL).
  * Keeping this lazy lets the whole suite self-skip (CI runs, no-DB runs)
  * without requiring supertest to be installed.
  */
 export async function getRequest() {
   const { default: request } = await import('supertest');
-  return request(BASE_URL);
+  return request;
 }
 
 /** Register a fresh user against the live server; returns { user, token, refreshToken }. */

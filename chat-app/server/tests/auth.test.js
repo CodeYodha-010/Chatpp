@@ -22,11 +22,16 @@ test('AUTH /api/auth/*', async (t) => {
   const user = makeUser('agbauth');
   let token = '';
 
-  await t.test('register → 201 + token + refreshToken (email lowercased, no hash leak)', async () => {
+  await t.test('register → 201 + token + refresh cookie (email lowercased, no hash leak)', async () => {
     const res = await request(BASE_URL).post('/api/auth/register').send(user);
     assert.equal(res.status, 201);
     assert.ok(res.body.token, 'expected access token');
-    assert.ok(res.body.refreshToken, 'expected refresh token');
+    // The refresh token is deliberately NOT in the JSON body — it is set as an
+    // httpOnly cookie (see routes/auth.js setRefreshCookie) so XSS cannot read it.
+    const cookies = res.headers['set-cookie'] || [];
+    const refreshCookie = cookies.find((c) => c.startsWith('refreshToken='));
+    assert.ok(refreshCookie, 'expected refreshToken cookie');
+    assert.ok(/httponly/i.test(refreshCookie), 'refreshToken cookie must be httpOnly');
     assert.equal(res.body.user.email, user.email.toLowerCase(), 'email must be stored lowercase');
     assert.equal(res.body.user.passwordHash, undefined, 'passwordHash must never leak');
     token = res.body.token;

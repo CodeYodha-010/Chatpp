@@ -91,13 +91,12 @@ test('ROOMS /api/rooms*', async (t) => {
     }
   });
 
-  await t.test('non-numeric room id → 500 (exact current behavior)', async () => {
-    // TODO(A1): tighten to 400 after revocation/NaN fixes land.
-    // Today parseInt('not-a-number') → NaN reaches Prisma → throw → 500
-    // via middleware/errorHandler.js. Exact assertion flips green when A1 ships.
+  await t.test('non-numeric room id → 400 (invalid id rejected before Prisma)', async () => {
+    // Phase 1 tightened this from the old crash-to-500 behavior (see TODO A1);
+    // NaN no longer reaches the database layer.
     const res = await request(BASE_URL)
       .get('/api/rooms/not-a-number/messages')
       .set(auth);
-    assert.equal(res.status, 500);
+    assert.equal(res.status, 400);
   });
 });

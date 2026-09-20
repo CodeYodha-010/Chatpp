@@ -1,4 +1,4 @@
-import prisma from '../config/database.js';
+import prisma, { withDb } from '../config/database.js';
 import { verifyPassword } from '../utils/password.js';
 import bcrypt from 'bcrypt';
 import env from '../config/env.js';
@@ -23,7 +23,10 @@ const User = {
   },
 
   async authenticate(email, password) {
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    // Login is the first query a returning user hits, so it is the first thing
+    // to fail when the pool has been drained by a suspended Neon compute.
+    // withDb rebuilds the pool and retries once instead of surfacing P2024.
+    const user = await withDb(() => prisma.user.findUnique({ where: { email: email.toLowerCase() } }));
     if (!user) {
       await bcrypt.compare(password, '$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvali');
       return null;

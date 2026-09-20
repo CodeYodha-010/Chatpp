@@ -4,6 +4,7 @@ import { authenticateHTTP } from '../middleware/auth.js';
 import { validate, schemas } from '../middleware/validate.js';
 import { strictLimiter } from '../middleware/rateLimit.js';
 import prisma from '../config/database.js';
+import Room from '../models/Room.js';
 
 router.use(authenticateHTTP);
 
@@ -31,12 +32,14 @@ router.post('/', validate(schemas.invite), async (req, res) => {
       return res.status(400).json({ error: 'Cannot invite yourself' });
     }
 
-    const names = [req.user.username, targetUser.username].sort();
-    const roomName = 'dm_' + names.join('_');
+    // Create the conversation for real instead of returning a name that leads
+    // nowhere: the DM must exist in the DB for history, reactions and deletes.
+    const room = await Room.findOrCreateDm(req.user.id, targetUser.id);
 
     res.json({
-      message: 'Invite sent! You can now chat with @' + targetUser.username,
-      room: roomName,
+      message: 'You can now chat with @' + targetUser.username,
+      room: room.name,
+      label: targetUser.displayName || targetUser.username,
       user: targetUser
     });
   } catch (err) {

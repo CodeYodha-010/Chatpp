@@ -39,4 +39,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=15s --timeout=5s --start-period=25s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3001)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["sh", "-c", "cd server && npx prisma generate && npx prisma db push --skip-generate || true; node index.js"]
+CMD ["sh", "-c", "cd server && npx prisma generate; npx prisma db push --skip-generate || (echo '[startup] prisma db push failed - retrying in 5s' && sleep 5 && npx prisma db push --skip-generate) || echo '[startup] ERROR: schema not synced after retry - starting anyway'; node index.js"]

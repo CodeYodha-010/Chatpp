@@ -204,7 +204,7 @@ sessions       audit_log                         └── created_at
 | POST | `/api/auth/logout` | Yes | Destroy session |
 | GET | `/api/users` | Yes | List users |
 | GET | `/api/users/:id` | Yes | Get user by ID |
-| GET | `/api/rooms` | Yes | List rooms |
+| GET | `/api/rooms` | Yes | List rooms visible to the caller (public + their DMs/groups) |
 | POST | `/api/rooms` | Yes | Create room |
 | GET | `/api/rooms/:id/messages` | Yes | Get room messages |
 
@@ -219,6 +219,7 @@ sessions       audit_log                         └── created_at
 | `user_join` | `{ nickname }` | Join with display name |
 | `join_room` | `{ room }` | Join a chat room |
 | `create_room` | `{ room }` | Create new room |
+| `create_dm` | `{ userId }` → ack `{ ok, room, label, type, peerId }` | Start/open a private conversation (idempotent per user pair) |
 | `send_message` | `{ room, message, nickname }` | Send message |
 | `typing` | `{ room, nickname }` | Started typing |
 | `stop_typing` | `{ room, nickname }` | Stopped typing |
@@ -228,7 +229,9 @@ sessions       audit_log                         └── created_at
 | Event | Payload | Description |
 |-------|---------|-------------|
 | `online_users` | `[{ nickname }]` | Updated user list |
-| `room_list` | `[rooms]` | Updated room list |
+| `room_list` | `[rooms]` | Public room names |
+| `conversation_list` | `[{ room, label, type, peerId }]` | Rooms this user may open; DMs are labelled with the other person's name |
+| `dm_created` | `{ room, label, type, peerId }` | Someone started a conversation with you |
 | `room_created` | `{ room }` | New room created |
 | `room_joined` | `{ room, messages }` | Joined room with history |
 | `new_message` | `{ id, nickname, content, priority, timestamp }` | New message |

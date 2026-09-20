@@ -26,6 +26,8 @@ model User {
   sessions    Session[]
   auditLogs   AuditLog[]
   reactions   Reaction[]
+  hidden      HiddenMessage[]
+  cleared     ClearedConversation[]
 
   @@map("users")
 }
@@ -33,6 +35,10 @@ model User {
 model Room {
   id          Int       @id @default(autoincrement())
   name        String    @unique
+  // Direct messages are identified by their sorted participant id pair
+  // ("3:7"), so the same two people always resolve to one conversation no
+  // matter who starts it. NULL for public rooms and groups.
+  dmKey       String?   @unique @map("dm_key")
   description String?
   type        String    @default("public")
   createdBy   Int?      @map("created_by")
@@ -43,6 +49,7 @@ model Room {
   creator     User?        @relation(fields: [createdBy], references: [id])
   memberships RoomMember[]
   messages    Message[]
+  clearedBy   ClearedConversation[]
 
   @@map("rooms")
 }
@@ -80,6 +87,7 @@ model Message {
   parent Message? @relation("MessageReplies", fields: [parentId], references: [id])
   replies Message[] @relation("MessageReplies")
   reactions Reaction[]
+  hiddenBy  HiddenMessage[]
 
   @@index([roomId, createdAt])
   @@index([priority])
@@ -101,6 +109,38 @@ model Reaction {
   @@unique([messageId, userId, emoji])
   @@index([messageId])
   @@map("reactions")
+}
+
+// Delete-for-me: one tombstone row per (user, message). Relations use
+// onDelete Cascade so removing a user or message cleans up its rows.
+model HiddenMessage {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  messageId Int      @map("message_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+  @@index([userId])
+  @@map("hidden_messages")
+}
+
+// Clear-chat-for-me: one row per (user, room). History queries exclude that
+// user's messages at or before clearedAt; new messages reappear normally.
+model ClearedConversation {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  roomId    Int      @map("room_id")
+  clearedAt DateTime @default(now()) @map("cleared_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roomId])
+  @@index([userId])
+  @@map("cleared_conversations")
 }
 
 model Session {

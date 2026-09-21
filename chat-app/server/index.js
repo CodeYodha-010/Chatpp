@@ -20,6 +20,71 @@ import requestLogger, { responseTime } from './middleware/requestLogger.js';
 import { setPresence, deletePresence, getOnlineUsers, createRedisAdapter, connectRedis, disconnectRedis } from './lib/redis.js';
 import { enqueueClassification, subscribeToPriorities } from './lib/queue.js';
 import LRUCache from './lib/LRUCache.js';
+// Privacy: per-user nickname allow-lists for scoped presence broadcasts.
+// TTL 30s keeps a fresh DM/group visible quickly; explicit invalidation in
+// create_dm / createGroup / membership changes keeps it correct.
+const relatedNickCache = new LRUCache(500, 30_000);
+
+// Nicknames a given user is allowed to see online: their contacts (shared
+// dm/group) plus themselves. null = unauthenticated/legacy, caller decides.
+async function relatedNicknames(userId, selfName) {
+  if (userId == null) return null;
+  const key = 'relnick:' + userId;
+  const hit = relatedNickCache.get(key);
+  if (hit) return hit;
+  const ids = await Room.listRelatedUserIds(userId);
+  const rows = ids.length
+    ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { displayName: true, username: true } })
+    : [];
+  const set = new Set(rows.map((u) => u.displayName || u.username));
+  if (selfName) set.add(selfName);
+  relatedNickCache.set(key, set);
+  return set;
+}
+
+// Every connected socket receives online_users filtered to its own related
+// set — never the global list.
+async function emitScopedOnlineUsers() {
+  const online = await getOnlineUsers();
+  const sockets = await io.fetchSockets();
+  const perUser = new Map();
+  for (const s of sockets) {
+    const uid = s.user?.id;
+    if (uid == null) continue;
+    let allowed = perUser.get(uid);
+    if (allowed === undefined) {
+      allowed = await relatedNicknames(uid, s.user.displayName || s.user.username);
+      perUser.set(uid, allowed);
+    }
+    // getOnlineUsers() returns { nickname, currentRoom } rows, so the scope test
+    // must read the nickname: comparing the object against a Set of strings
+    // would drop every real user and every socket would look alone.
+    s.emit('online_users', allowed ? online.filter((n) => allowed.has(n.nickname)) : online);
+  }
+}
+
+// user_joined / user_left announcements are presence too — only sockets
+// related to that nickname receive them.
+async function emitPresenceEvent(event, nickname) {
+  const sockets = await io.fetchSockets();
+  const perUser = new Map();
+  for (const s of sockets) {
+    const uid = s.user?.id;
+    if (uid == null) continue;
+    let allowed = perUser.get(uid);
+    if (allowed === undefined) {
+      allowed = await relatedNicknames(uid, s.user.displayName || s.user.username);
+      perUser.set(uid, allowed);
+    }
+    const isSelf = (s.user.displayName || s.user.username) === nickname;
+    if (!allowed || allowed.has(nickname) || isSelf) s.emit(event, { nickname });
+  }
+}
+
+function invalidateRelatedNicknames(userId) {
+  if (userId != null) relatedNickCache.delete('relnick:' + userId);
+}
+
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import roomRoutes from './routes/rooms.js';
@@ -30,7 +95,7 @@ import Reaction from './models/Reaction.js';
 import Room from './models/Room.js';
 import { attachReactions, reactionPayload } from './lib/reactions.js';
 import { createReactionWriter } from './lib/reactionWriter.js';
-import prisma, { withDb, isDbConnected, shutdownDb } from './config/database.js';
+import prisma, { withDb, isDbConnected, shutdownDb, isDeadConnection } from './config/database.js';
 
 const app = express();
 
@@ -236,8 +301,8 @@ console.log("[STARTUP] Starting HTTP server on " + HOST + ":" + PORT);
 // Socket.IO. The global online list lives in Redis (lib/redis.js) so every
 // replica reports the same presence.
 const users = new Map(); // socketId -> { nickname, currentRoom }
-const rooms = { general: [], tech: [], random: [] };
-const roomNames = ['general', 'tech', 'random'];
+const rooms = {};
+const roomNames = [];
 const roomDbCache = new LRUCache(200, 300_000); // Cache room DB lookups for 5 min
 
 const saveReaction = createReactionWriter(prisma);
@@ -266,9 +331,9 @@ function emitMessageBatched(room, messageObj) {
   }
 }
 
-// Privacy gate for room access. Public rooms stay open to every signed-in
-// user; dm/group rooms require an explicit room_members row. Rooms with no DB
-// row yet (live-only public rooms) are treated as open.
+// Privacy gate for room access. WhatsApp-style: every conversation is a DM or
+// group and requires an explicit room_members row. Rooms with no DB row are
+// rejected — there are no open public rooms.
 async function roomGate(socket, room) {
   if (!socket.user?.id) return { ok: false, reason: 'Authentication required' };
   let row = roomDbCache.get(room);
@@ -280,8 +345,7 @@ async function roomGate(socket, room) {
       logger.error('Room lookup failed', { error: err.message, room });
     }
   }
-  if (!row) return { ok: true, row: null };
-  if (row.type !== 'dm' && row.type !== 'group') return { ok: true, row };
+  if (!row) return { ok: false, reason: 'Conversation not found' };
   try {
     const member = await Room.isMember(row.id, socket.user.id);
     return member ? { ok: true, row } : { ok: false, reason: 'You are not a member of this conversation' };
@@ -291,21 +355,23 @@ async function roomGate(socket, room) {
   }
 }
 
-// Neon's pooler intermittently refuses a connection (P2024) under load. One
-// retry keeps a convenience refresh from silently dropping; callers still see
-// the error if the retry fails too.
+// Neon's pooler intermittently refuses a connection under load. One retry keeps
+// a convenience refresh from silently dropping; callers still see the error if
+// the retry fails too.
 async function withDbRetry(fn, attempts = 2) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
     try { return await fn(); } catch (err) {
       lastErr = err;
-      if (err.code !== 'P2024') break;
+      // Use the shared classifier rather than P2024 alone: a rebuild window
+      // also surfaces P2028 and "Engine is not yet connected".
+      if (!isDeadConnection(err)) break;
     }
   }
   throw lastErr;
 }
 
-// Sidebar payload for one user: public rooms plus their DMs/groups, each with
+// Sidebar payload for one user: only their DMs/groups, each with
 // the label to display (a DM shows the other person's name).
 async function emitConversationList(userId, target) {
   if (!userId) return;
@@ -345,8 +411,8 @@ io.on('connection', (socket) => {
       logger.info(`${user.nickname} disconnected`, { socketId: socket.id });
       users.delete(socket.id);
       await deletePresence(socket.id);
-      io.emit('online_users', await getOnlineUsers());
-      io.emit('user_left', { nickname: user.nickname });
+      await emitScopedOnlineUsers();
+      await emitPresenceEvent('user_left', user.nickname);
     }
   });
 
@@ -365,8 +431,8 @@ io.on('connection', (socket) => {
     await setPresence(socket.id, { nickname: effectiveNickname });
     logger.info(`${effectiveNickname} joined`, { socketId: socket.id });
 
-    io.emit('online_users', await getOnlineUsers());
-    io.emit('user_joined', { nickname: effectiveNickname });
+    await emitScopedOnlineUsers();
+    await emitPresenceEvent('user_joined', effectiveNickname);
     socket.emit('room_list', roomNames);
     await emitConversationList(socket.user?.id, socket);
   });
@@ -384,15 +450,14 @@ io.on('connection', (socket) => {
     const user = users.get(socket.id);
     if (!user) return;
 
-    // Gate before joining: a dm/group room must never admit a non-member, and
-    // the type has to be known before the socket enters the Socket.IO room.
+    // Gate before joining: only DM/group members may enter. There are no open
+    // rooms, and membership is never self-granted at join time.
     const gate = await roomGate(socket, room);
     if (!gate.ok) {
       socket.emit('error', { message: gate.reason });
       return;
     }
     const roomRow = gate.row;
-    const gated = !!roomRow && (roomRow.type === 'dm' || roomRow.type === 'group');
 
     // Leave previous room
     if (user.currentRoom) {
@@ -401,20 +466,6 @@ io.on('connection', (socket) => {
 
     user.currentRoom = room;
     socket.join(room);
-
-    // Public rooms are open: joining grants membership (and REST access to the
-    // transcript). DM/group membership is explicit and must not be self-granted.
-    if (roomRow && socket.user?.id && !gated) {
-      try {
-        await prisma.roomMember.upsert({
-          where: { roomId_userId: { roomId: roomRow.id, userId: socket.user.id } },
-          update: {},
-          create: { roomId: roomRow.id, userId: socket.user.id, role: 'member' }
-        });
-      } catch (err) {
-        logger.error('Failed to add user to room_members', { error: err.message });
-      }
-    }
 
     // Load messages from memory (fast) + fill from DB if memory is empty.
     // The shared cache may hold rows this user hid or cleared, so every join
@@ -521,6 +572,9 @@ io.on('connection', (socket) => {
 
       const room = await Room.findOrCreateDm(socket.user.id, peer.id);
       roomDbCache.set(room.name, { id: room.id, type: room.type });
+      // A new DM creates a relationship on both sides — refresh presence scopes.
+      invalidateRelatedNicknames(socket.user.id);
+      invalidateRelatedNicknames(peer.id);
       if (!rooms[room.name]) rooms[room.name] = [];
 
       const payload = { room: room.name, label: peer.displayName || peer.username, type: 'dm', peerId: peer.id };
@@ -564,6 +618,8 @@ io.on('connection', (socket) => {
       roomDbCache.set(room.name, { id: room.id, type: room.type });
       if (!rooms[room.name]) rooms[room.name] = [];
       const members = await Room.getMembers(room.id);
+      // Everyone in the new group becomes visible to everyone else in it.
+      for (const member of members) invalidateRelatedNicknames(member.id);
       // The creator's reply carries the label so no extra lookup is needed.
       for (const member of members) {
         // eslint-disable-next-line no-await-in-loop -- membership refresh is user-visible
@@ -621,6 +677,11 @@ io.on('connection', (socket) => {
         roomDbCache.delete(room);
         roomDbCache.delete(`${room}:full`);
       }
+      // Membership changed → the related set of everyone in the group may have
+      // shifted. Refresh now; the next presence broadcast uses fresh scopes.
+      invalidateRelatedNicknames(socket.user.id);
+      invalidateRelatedNicknames(target);
+      for (const m of await Room.getMembers(gate.room.id)) invalidateRelatedNicknames(m.id);
       const label = await Room.groupLabel(gate.room.id);
       const members = await Room.getMembers(gate.room.id);
       const payload = { room, label, type: 'group', members, removedUserId: action === 'add' ? null : target };
@@ -641,51 +702,10 @@ io.on('connection', (socket) => {
   socket.on('remove_group_member', (data = {}, ack) => changeGroupMembership({ socket, room: data.room, targetId: data.userId, action: 'remove', ack }));
   socket.on('leave_group', (data = {}, ack) => changeGroupMembership({ socket, room: data.room, targetId: socket.user.id, action: 'leave', ack }));
 
-  // 2b. Create a new room
-  const roomCreationTracker = new Map();
-  socket.on('create_room', async ({ room }) => {
-    if (typeof room !== 'string' || room.length === 0 || room.length > 50) {
-      socket.emit('error', { message: 'Invalid room name' });
-      return;
-    }
-    if (!/^[a-zA-Z0-9_-]+$/.test(room)) {
-      socket.emit('error', { message: 'Room name can only contain letters, numbers, hyphens, underscores' });
-      return;
-    }
-    if (!socket.user) {
-      socket.emit('error', { message: 'Authentication required' });
-      return;
-    }
-    if (rooms[room]) {
-      socket.emit('error', { message: 'Room already exists' });
-      return;
-    }
-    const userId = socket.user.id;
-    const now = Date.now();
-    const userCreations = roomCreationTracker.get(userId) || [];
-    const recentCreations = userCreations.filter(t => now - t < 3600000);
-    if (recentCreations.length >= 5) {
-      socket.emit('error', { message: 'Room creation limit reached (5 per hour)' });
-      return;
-    }
-    recentCreations.push(now);
-    roomCreationTracker.set(userId, recentCreations);
-    rooms[room] = [];
-    roomNames.push(room);
-    io.emit('room_created', { room });
-    io.emit('room_list', roomNames);
-
-    try {
-      const row = await prisma.room.upsert({
-        where: { name: room },
-        update: {},
-        create: { name: room, description: `${room} room`, type: 'public' }
-      });
-      roomDbCache.set(room, { id: row.id, type: row.type });
-      if (socket.user?.id) await Room.addMember(row.id, socket.user.id, 'admin');
-    } catch (err) {
-      logger.error('Failed to persist room', { error: err.message });
-    }
+  // 2b. Create a new room — DISABLED (WhatsApp-style: DMs/groups only).
+  // Kept as a stub so old clients get a clear error instead of silence.
+  socket.on('create_room', async () => {
+    socket.emit('error', { message: 'Public rooms are disabled — invite someone to chat' });
   });
 
   // 2c. Send message

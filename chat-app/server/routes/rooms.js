@@ -1,7 +1,6 @@
 import express from 'express';
 const router = express.Router();
 import { authenticateHTTP } from '../middleware/auth.js';
-import { validate, schemas } from '../middleware/validate.js';
 import Room from '../models/Room.js';
 import Message from '../models/Message.js';
 
@@ -14,23 +13,14 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/', validate(schemas.createRoom), async (req, res, next) => {
-  try {
-    const { name, description, type } = req.body;
-
-    if (type === 'group') {
-      return res.status(422).json({ error: 'Groups are created from the New group button, not the room endpoint' });
-    }
-    if (await Room.findByName(name)) {
-      return res.status(409).json({ error: 'Room name already exists' });
-    }
-
-    const room = await Room.create({ name, description, type: 'public', created_by: req.user.id });
-    await Room.addMember(room.id, req.user.id, 'admin');
-    res.status(201).json({ room });
-  } catch (err) {
-    next(err); // async DB failures must 500, not crash the process
-  }
+// The contacts-only rework removed public rooms entirely, so there is no
+// room-creation endpoint any more: DMs are created implicitly from the People
+// panel and groups from the New group flow. 410 tells a stale client the
+// capability is gone for good, not merely that the request was malformed.
+router.post('/', (req, res) => {
+  res.status(410).json({
+    error: 'Public rooms were removed. Start a DM from the People panel or create a group with the New group button.'
+  });
 });
 
 router.get('/:id/members', async (req, res, next) => {

@@ -29,7 +29,11 @@ export default [
       // `recommended` (not the flat-config variant) keeps this working across
       // plugin majors, since only its `.rules` object is version-stable.
       ...reactHooks.configs.recommended.rules,
-      'react-hooks/exhaustive-deps': 'warn'
+      'react-hooks/exhaustive-deps': 'warn',
+      // TDZ guard: flags a const/let used before its declaration line — the
+      // other "only crashes in the browser" class (declared-later ≠ undefined).
+      // functions:false lets hoisted function declarations keep their order.
+      'no-use-before-define': ['error', { functions: false, classes: false, variables: true }]
     }
   }
 ];

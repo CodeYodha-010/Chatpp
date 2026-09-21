@@ -1,5 +1,5 @@
 import { verifyToken } from '../utils/jwt.js';
-import prisma from '../config/database.js';
+import prisma, { withDb } from '../config/database.js';
 
 export async function authenticateHTTP(req, res, next) {
   const header = req.headers.authorization;
@@ -12,21 +12,23 @@ export async function authenticateHTTP(req, res, next) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  // ponytail: global session check; per-token revocation via jti==session.id when present
+  // ponytail: global session check; per-token revocation via jti==session.id when present.
+  // This runs on every request, so it must ride out a pool rebuild — an unwrapped
+  // call here surfaced as an unhandled rejection when Neon suspended mid-run.
   if (decoded.jti) {
-    const session = await prisma.session.findUnique({ where: { id: decoded.jti } });
+    const session = await withDb(() => prisma.session.findUnique({ where: { id: decoded.jti } }));
     if (!session || session.userId !== decoded.userId || session.expiresAt < new Date()) {
       return res.status(401).json({ error: 'Session expired or revoked' });
     }
   } else {
-    const anySession = await prisma.session.findFirst({ where: { userId: decoded.userId, expiresAt: { gt: new Date() } } });
+    const anySession = await withDb(() => prisma.session.findFirst({ where: { userId: decoded.userId, expiresAt: { gt: new Date() } } }));
     if (!anySession) return res.status(401).json({ error: 'Session expired or revoked' });
   }
 
-  const user = await prisma.user.findUnique({
+  const user = await withDb(() => prisma.user.findUnique({
     where: { id: decoded.userId, isActive: true },
     select: { id: true, username: true, email: true, displayName: true, avatarColor: true }
-  });
+  }));
   if (!user) {
     return res.status(401).json({ error: 'User not found' });
   }
@@ -47,19 +49,19 @@ export async function authenticateSocket(socket, next) {
   }
 
   if (decoded.jti) {
-    const session = await prisma.session.findUnique({ where: { id: decoded.jti } });
+    const session = await withDb(() => prisma.session.findUnique({ where: { id: decoded.jti } }));
     if (!session || session.userId !== decoded.userId || session.expiresAt < new Date()) {
       return next(new Error('Session expired or revoked'));
     }
   } else {
-    const anySession = await prisma.session.findFirst({ where: { userId: decoded.userId, expiresAt: { gt: new Date() } } });
+    const anySession = await withDb(() => prisma.session.findFirst({ where: { userId: decoded.userId, expiresAt: { gt: new Date() } } }));
     if (!anySession) return next(new Error('Session expired or revoked'));
   }
 
-  const user = await prisma.user.findUnique({
+  const user = await withDb(() => prisma.user.findUnique({
     where: { id: decoded.userId },
     select: { id: true, username: true, email: true, displayName: true, avatarColor: true }
-  });
+  }));
   if (!user) {
     return next(new Error('User not found'));
   }

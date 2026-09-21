@@ -1,4 +1,4 @@
-import prisma from '../config/database.js';
+import prisma, { resilientModel } from '../config/database.js';
 
 const Message = {
   async create({ room_id, user_id, username, encrypted_content, iv, auth_tag, priority, parent_id }) {
@@ -160,4 +160,6 @@ const Message = {
   }
 };
 
-export default Message;
+// Every method is resilientModel-wrapped: a pool drained by a suspended Neon
+// compute rebuilds and retries once instead of surfacing a raw P2024.
+export default resilientModel(Message);

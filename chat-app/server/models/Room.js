@@ -1,4 +1,4 @@
-import prisma from '../config/database.js';
+import prisma, { resilientModel } from '../config/database.js';
 import Message from './Message.js';
 
 const Room = {
@@ -55,14 +55,14 @@ const Room = {
     });
   },
 
-  // Rooms visible to one user: every public room, plus the DMs and groups they
-  // belong to. `label` is what the sidebar renders — for a DM that is the other
-  // participant's name, never the internal "dm_3_7" room name.
+  // Rooms visible to one user: ONLY the DMs and groups they belong to —
+  // WhatsApp-style, no public rooms. `label` is what the sidebar renders.
   async listForUser(userId) {
     const rows = await prisma.room.findMany({
       where: {
         isArchived: false,
-        OR: [{ type: 'public' }, { memberships: { some: { userId } } }]
+        type: { in: ['dm', 'group'] },
+        memberships: { some: { userId } }
       },
       orderBy: { createdAt: 'asc' },
       select: { id: true, name: true, type: true }
@@ -100,6 +100,22 @@ const Room = {
     });
   },
 
+  // The "People" universe for one user: ids of everyone sharing at least one
+  // dm/group room with them. Public rooms are deliberately excluded — being in
+  // #general with someone is not a relationship, or the directory would leak
+  // to every registered user again. Empty result = no contacts yet.
+  async listRelatedUserIds(userId) {
+    const rows = await prisma.roomMember.findMany({
+      where: {
+        userId: { not: userId },
+        room: { type: { in: ['dm', 'group'] }, memberships: { some: { userId } } }
+      },
+      select: { userId: true },
+      distinct: ['userId']
+    });
+    return rows.map((r) => r.userId);
+  },
+
   // Group conversation with an explicit membership list. The server owns the
   // room identity (same as DMs): internal names are unique but labels are free
   // text, so two different owners can both have a "Family" group without
@@ -133,30 +149,6 @@ const Room = {
   // land in the same conversation regardless of who opens it first. Ids (not
   // usernames) keep the generated name short enough for join_room's 50-char cap
   // and free of characters join_room rejects.
-  async findOrCreateDm(userAId, userBId) {
-    const clean = String(name || '').trim().replace(/\s+/g, ' ');
-    if (clean.length < 1 || clean.length > 50) throw new Error('Group name must be 1-50 characters');
-    const invited = [...new Set((Array.isArray(userIds) ? userIds : []).map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))];
-    const members = [...new Set([createdBy, ...invited])];
-    if (members.length < 2) throw new Error('Pick at least one other person for the group');
-    if (members.length > 25) throw new Error('A group can have at most 25 people');
-    const users = await prisma.user.findMany({
-      where: { id: { in: members } },
-      select: { id: true }
-    });
-    if (users.length !== members.length) throw new Error('Everyone in the group must exist');
-    // Internal name is unique and always join-safe; the display label is `clean`.
-    const suffix = Math.random().toString(36).slice(2, 8);
-    const roomName = `grp_${Date.now().toString(36)}${suffix}`;
-    const room = await prisma.room.create({
-      data: { name: roomName, type: 'group', description: clean, createdBy }
-    });
-    for (const id of members) {
-      // eslint-disable-next-line no-await-in-loop -- group size is capped at 25
-      await this.addMember(room.id, id, id === createdBy ? 'owner' : 'member');
-    }
-    return { room, label: clean };
-  },
   async findOrCreateDm(userAId, userBId) {
     if (userAId === userBId) throw new Error('Cannot start a conversation with yourself');
     const [x, y] = [userAId, userBId].sort((a, b) => a - b);
@@ -233,13 +225,14 @@ const Room = {
     return { deleted: true, waitingForPeer: false, room };
   },
 
-  // REST listing: rooms this user may open — public plus their own
-  // conversations. Mirrors listForUser() but keeps the raw row shape.
+  // REST listing: rooms this user may open — only their own DMs/groups.
+  // Mirrors listForUser() but keeps the raw row shape.
   async listVisible(userId) {
     return prisma.room.findMany({
       where: {
         isArchived: false,
-        OR: [{ type: 'public' }, { memberships: { some: { userId } } }]
+        type: { in: ['dm', 'group'] },
+        memberships: { some: { userId } }
       },
       orderBy: { createdAt: 'desc' },
       select: { id: true, name: true, description: true, type: true, createdBy: true, createdAt: true }
@@ -271,4 +264,6 @@ const Room = {
   }
 };
 
-export default Room;
+// Every method is resilientModel-wrapped: a pool drained by a suspended Neon
+// compute rebuilds and retries once instead of surfacing a raw P2024.
+export default resilientModel(Room);

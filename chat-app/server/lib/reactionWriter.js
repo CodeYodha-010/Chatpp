@@ -1,12 +1,15 @@
 import { aggregateReactions } from './reactions.js';
+import { withDb } from '../config/database.js';
 
 // Serialize changes to a message on this instance. A failed write must not
 // poison subsequent work, and no caller receives success before persistence.
+// Each write runs inside withDb() so a drained pool (suspended Neon compute)
+// rebuilds and retries instead of failing the reaction ack.
 export function createReactionWriter(db) {
   const pending = new Map();
   return function saveReaction({ messageId, userId, emoji, active }) {
     const previous = pending.get(messageId) || Promise.resolve();
-    const operation = previous.catch(() => {}).then(async () => {
+    const operation = previous.catch(() => {}).then(() => withDb(async () => {
       const key = { messageId, userId, emoji };
       const desired = active ?? !(await db.reaction.findUnique({
         where: { messageId_userId_emoji: key }
@@ -21,7 +24,7 @@ export function createReactionWriter(db) {
         where: { messageId }, select: { messageId: true, userId: true, emoji: true }
       });
       return aggregateReactions(rows).get(messageId) || [];
-    });
+    }));
     pending.set(messageId, operation);
     const cleanup = () => { if (pending.get(messageId) === operation) pending.delete(messageId); };
     operation.then(cleanup, cleanup);

@@ -37,39 +37,38 @@ test('ROOMS /api/rooms*', async (t) => {
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.rooms), 'expected { rooms: [...] }');
     rooms = res.body.rooms;
-    assert.ok(rooms.length > 0, 'seeded rooms (general/tech/random) should exist');
+    // Privacy model: the list holds only conversations the caller belongs to.
+    // Public rooms may still exist in the database but must never be listed.
+    assert.ok(rooms.every((r) => r.type === 'dm' || r.type === 'group'), 'only dm/group rows are listable');
+    assert.ok(!rooms.some((r) => r.name === 'general'), 'public rooms are never listed');
     for (const r of rooms) {
       assert.equal(typeof r.id, 'number');
       assert.equal(typeof r.name, 'string');
     }
   });
 
-  const roomName = `agentb-${Date.now()}`;
-  let createdId = null;
-
-  await t.test('create room → 201 (+ creator membership via Room.addMember)', async () => {
+  await t.test('POST /api/rooms → 410 (public rooms were removed)', async () => {
+    // The contacts-only rework has no public rooms and no room-creation
+    // endpoint: DMs are created implicitly from the People panel and groups
+    // from the New group flow, so creating one here must be refused.
     const res = await request(BASE_URL)
       .post('/api/rooms')
       .set(auth)
-      .send({ name: roomName, description: 'Agent B smoke room', type: 'public' });
-    assert.equal(res.status, 201);
-    assert.equal(res.body.room.name, roomName);
-    createdId = res.body.room.id;
-  });
-
-  await t.test('duplicate room name → 409', async () => {
-    const res = await request(BASE_URL).post('/api/rooms').set(auth).send({ name: roomName });
-    assert.equal(res.status, 409);
+      .send({ name: `agentb-${Date.now()}`, description: 'Agent B smoke room', type: 'public' });
+    assert.equal(res.status, 410);
   });
 
   await t.test('room messages without token → 401', async () => {
-    const res = await request(BASE_URL).get(`/api/rooms/${createdId}/messages`);
+    // Authentication runs before the id is parsed, so any id returns 401.
+    const res = await request(BASE_URL).get('/api/rooms/1/messages');
     assert.equal(res.status, 401);
   });
 
-  await t.test('messages ?limit=5 → 200 with at most 5 rows', async () => {
+  await t.test('messages ?limit=5 → 200 with at most 5 rows', async (st) => {
+    const own = rooms.find((r) => r.type === 'dm');
+    if (!own) return st.skip('caller has no conversation yet (is the demo user missing?)');
     const res = await request(BASE_URL)
-      .get(`/api/rooms/${createdId}/messages`)
+      .get(`/api/rooms/${own.id}/messages`)
       .query({ limit: 5 })
       .set(auth);
     assert.equal(res.status, 200);
@@ -77,11 +76,13 @@ test('ROOMS /api/rooms*', async (t) => {
     assert.ok(res.body.messages.length <= 5, 'limit param must be honored');
   });
 
-  await t.test('seeded general room messages → 200 with full encrypted shape', async (st) => {
-    const general = rooms.find((r) => r.name === 'general');
-    if (!general) return st.skip('seeded general room missing (db not seeded?)');
+  await t.test('own conversation messages → 200 with full encrypted shape', async (st) => {
+    // Public rooms are no longer listed, so exercise the shape on the caller's
+    // own conversation (the Demo DM created at registration).
+    const own = rooms.find((r) => r.type === 'dm');
+    if (!own) return st.skip('caller has no conversation yet (is the demo user missing?)');
 
-    const res = await request(BASE_URL).get(`/api/rooms/${general.id}/messages`).set(auth);
+    const res = await request(BASE_URL).get(`/api/rooms/${own.id}/messages`).set(auth);
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.messages));
     for (const m of res.body.messages) {

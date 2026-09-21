@@ -7,7 +7,7 @@ import { authenticateHTTP } from '../middleware/auth.js';
 import { validate, schemas, checkDisposableEmail } from '../middleware/validate.js';
 import { authLimiter } from '../middleware/rateLimit.js';
 import { csrfProtection, issueCsrfToken, getCsrfToken } from '../middleware/csrf.js';
-import prisma from '../config/database.js';
+import prisma, { withDb } from '../config/database.js';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 
@@ -26,10 +26,12 @@ router.post('/register', authLimiter, validate(schemas.register), checkDisposabl
   try {
     const { username, email, password, display_name } = req.body;
 
-    if (await User.findByEmail(email)) {
+    // withDb rides out a pool rebuild (Neon scale-to-zero strands pool sockets),
+    // so a cold database cannot turn a first-time signup into a 500.
+    if (await withDb(() => User.findByEmail(email))) {
       return res.status(409).json({ error: 'Email already registered' });
     }
-    if (await User.findByUsername(username)) {
+    if (await withDb(() => User.findByUsername(username))) {
       return res.status(409).json({ error: 'Username already taken' });
     }
 
@@ -37,7 +39,11 @@ router.post('/register', authLimiter, validate(schemas.register), checkDisposabl
     const jti = crypto.randomUUID();
     const refreshToken = generateRefreshToken();
 
-    const { user, token } = await prisma.$transaction(async (tx) => {
+    // Wrapped in withDb because transaction *starts* are the first thing to fail
+    // on a cold pool ("Unable to start a transaction in the given time").
+    // Retrying is safe: a failed transaction rolls back completely, and jti,
+    // hash and refresh token are all computed before it runs.
+    const { user, token } = await withDb(() => prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: {
           username: username.toLowerCase(),
@@ -59,8 +65,21 @@ router.post('/register', authLimiter, validate(schemas.register), checkDisposabl
         }
       });
       return { user: created, token: realToken };
-    });
+    }));
     await prisma.auditLog.create({ data: { userId: user.id, action: 'register', ipAddress: req.ip } }).catch(() => {});
+
+    // WhatsApp-style onboarding: every new account starts with exactly one
+    // contact — Demo — so chat can be tested immediately. Best-effort: a
+    // missing Demo user must never fail registration.
+    try {
+      const demo = await prisma.user.findUnique({ where: { username: 'demo' }, select: { id: true } });
+      if (demo && demo.id !== user.id) {
+        const { default: Room } = await import('../models/Room.js');
+        await Room.findOrCreateDm(user.id, demo.id);
+      }
+    } catch (err) {
+      logger.warn('Demo DM wiring failed', { error: err.message, userId: user.id });
+    }
 
     logger.info('User registered', { userId: user.id, username: user.username });
     setRefreshCookie(res, refreshToken);

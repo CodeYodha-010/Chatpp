@@ -22,9 +22,17 @@ export function isDbConnected() { return dbConnected; }
 // keeps the dead socket in its pool and never rebuilds it on its own, so the
 // pool drains to zero and every later query times out. Rebuilding the pool is
 // the actual fix for this failure mode.
-const DEAD_CONN = /E57P01|P1017|P2024|closed the connection|Connection reset|ECONNRESET|terminating connection/i;
+// Two extra shapes show up right after a rebuild, before the fresh engine is
+// usable: "Engine is not yet connected" (PrismaClientUnknownRequestError, which
+// carries no error code) and "Unable to start a transaction in the given time"
+// (P2028, a transaction that could not grab a pool slot). Both are cured by the
+// same pool rebuild, so they belong in this list; without them withDb rethrows
+// them as hard 500s while the pool is still coming back.
+const DEAD_CONN = /E57P01|P1017|P2024|P2028|closed the connection|Connection reset|ECONNRESET|terminating connection|Engine is not yet connected|Unable to start a transaction/i;
 
-function isDeadConnection(err) {
+// Exported so the socket layer's retry helper classifies errors identically
+// instead of testing for P2024 alone.
+export function isDeadConnection(err) {
   if (!err) return false;
   const code = String(err.code || '');
   const msg = String(err.message || err);
@@ -35,17 +43,39 @@ let retryCount = 0;
 let reconnectInFlight = null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// $connect() is NOT bounded by connect_timeout. When the engine stalls on a
+// half-dead socket it can hang forever, and every query issued meanwhile simply
+// queues behind it -- so pool_timeout never fires either and the process looks
+// alive while every DB call hangs. Racing the connect against a timer turns that
+// permanent wedge into a failed attempt we can retry.
+const CONNECT_TIMEOUT_MS = Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000);
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
+}
+
 // Bounded connect attempt. Returns true on success; never throws.
 async function attemptConnect(attempts, label) {
   for (let i = 1; i <= attempts; i++) {
     try {
-      await prisma.$connect();
+      const connect = prisma.$connect();
+      // Observed separately so a late rejection cannot surface as an unhandled
+      // rejection once the race below has already moved on.
+      connect.catch(() => {});
+      await withTimeout(connect, CONNECT_TIMEOUT_MS, 'prisma.$connect()');
       dbConnected = true;
       retryCount = 0;
       logger.info('Database connected via Prisma', { label, attempt: i });
       return true;
     } catch (err) {
       dbConnected = false;
+      // Drop the half-open engine before retrying: a fresh $connect() is what
+      // actually recovers a wedged pool.
+      await prisma.$disconnect().catch(() => {});
       const delay = Math.min(1000 * Math.pow(1.6, i), 30000);
       logger.warn('DB connect attempt failed', { label, attempt: i, attempts, retryInMs: delay, error: err.message });
       if (i < attempts) await sleep(delay);
@@ -101,6 +131,22 @@ export async function withDb(fn) {
     if (!ok) throw err;
     return fn();
   }
+}
+
+// Wrap a model object so every method runs inside withDb(): a pool drained by a
+// suspended Neon compute then rebuilds once and retries instead of surfacing a
+// raw P2024 to the caller. This is what keeps the Room/Message socket paths
+// (which have no route-level wrapper) alive across an idle-compute cold start.
+// Methods are bound to the raw object, so a method calling this.other() uses
+// the unwrapped version rather than nesting withDb through the proxy.
+export function resilientModel(model) {
+  return new Proxy(model, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop);
+      if (typeof value !== 'function') return value;
+      return (...args) => withDb(() => value.apply(target, args));
+    }
+  });
 }
 
 // Optional keep-alive. OFF by default: on Neon's free plan, holding the compute

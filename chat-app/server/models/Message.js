@@ -20,7 +20,7 @@ const Message = {
     return prisma.message.findUnique({ where: { id } });
   },
 
-  async listByRoom(roomId, { limit = 50, before = null, userId = null } = {}) {
+  async listByRoom(roomId, { limit = 50, before = null, userId = null, withReactions = false } = {}) {
     // Delete-for-everyone (isDeleted) is global. Delete-for-me and clear-chat
     // are per user: HiddenMessage ids and the ClearedConversation cutoff are
     // applied only when userId is supplied. Public listing passes no userId.
@@ -42,7 +42,14 @@ const Message = {
     const messages = await prisma.message.findMany({
       where,
       orderBy: { id: 'desc' },
-      take: limit
+      take: limit,
+      // Reactions ride along with the transcript in one round-trip instead of a
+      // follow-up query, so a join costs one trip instead of two. The selected
+      // shape is exactly what attachReactions() consumes. Off by default: the
+      // search path and the REST listing do not need reactions.
+      ...(withReactions
+        ? { include: { reactions: { select: { messageId: true, userId: true, emoji: true } } } }
+        : {})
     });
     return messages.reverse();
   },

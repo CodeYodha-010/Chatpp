@@ -17,7 +17,12 @@ import { authenticateHTTP, authenticateSocket } from './middleware/auth.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import requestLogger, { responseTime } from './middleware/requestLogger.js';
-import { setPresence, deletePresence, getOnlineUsers, createRedisAdapter, connectRedis, disconnectRedis } from './lib/redis.js';
+import { setPresence, deletePresence, getOnlineUsers, getRedis, createRedisAdapter, connectRedis, disconnectRedis } from './lib/redis.js';
+// Shared transcript cache: in-process map first (zero latency), Redis second
+// (survives deploys and is shared across instances), Neon only on a miss.
+// The process map and Redis both hold the viewer-neutral transcript; the
+// join-time viewer filter (hidden ids, clear cutoff) always runs on top.
+import { getCachedTranscript, setCachedTranscript, invalidateCachedTranscript } from './lib/transcriptCache.js';
 import { enqueueClassification, subscribeToPriorities } from './lib/queue.js';
 import LRUCache from './lib/LRUCache.js';
 // Privacy: per-user nickname allow-lists for scoped presence broadcasts.
@@ -26,16 +31,24 @@ import LRUCache from './lib/LRUCache.js';
 const relatedNickCache = new LRUCache(500, 30_000);
 
 // Nicknames a given user is allowed to see online: their contacts (shared
-// dm/group) plus themselves. null = unauthenticated/legacy, caller decides.
+// dm/group) plus themselves. One round-trip: the relationship filter runs
+// nested in the WHERE (same shape as GET /api/users) instead of fetching
+// related ids and then the user rows. null = unauthenticated/legacy.
 async function relatedNicknames(userId, selfName) {
   if (userId == null) return null;
   const key = 'relnick:' + userId;
   const hit = relatedNickCache.get(key);
   if (hit) return hit;
-  const ids = await Room.listRelatedUserIds(userId);
-  const rows = ids.length
-    ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { displayName: true, username: true } })
-    : [];
+  const rows = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      id: { not: userId },
+      memberships: {
+        some: { room: { type: { in: ['dm', 'group'] }, memberships: { some: { userId } } } }
+      }
+    },
+    select: { displayName: true, username: true }
+  });
   const set = new Set(rows.map((u) => u.displayName || u.username));
   if (selfName) set.add(selfName);
   relatedNickCache.set(key, set);
@@ -305,6 +318,24 @@ const rooms = {};
 const roomNames = [];
 const roomDbCache = new LRUCache(200, 300_000); // Cache room DB lookups for 5 min
 
+// Membership-safe gate cache: one query answers "does this room exist AND is
+// the caller a member", and caching that answer removes the gate's database
+// round-trip on repeats. Allowed answers live 60s; denied answers only 5s so a
+// freshly invited user is never told "not a member" by a stale negative. The
+// key embeds a per-room epoch, so invalidateRoomGate() drops every user's
+// entry for a room with one write instead of iterating keys.
+const gateAllowCache = new LRUCache(2000, 60_000);
+const gateDenyCache = new LRUCache(2000, 5_000);
+const gateEpoch = new LRUCache(2000, 300_000);
+
+function invalidateRoomGate(room) {
+  gateEpoch.set(room, (gateEpoch.get(room) || 0) + 1);
+}
+
+function gateKey(room, userId) {
+  return `${room}:${gateEpoch.get(room) || 0}:${userId}`;
+}
+
 const saveReaction = createReactionWriter(prisma);
 
 // Message batching: group high-frequency new_message emissions into a single
@@ -336,23 +367,32 @@ function emitMessageBatched(room, messageObj) {
 // rejected — there are no open public rooms.
 async function roomGate(socket, room) {
   if (!socket.user?.id) return { ok: false, reason: 'Authentication required' };
-  let row = roomDbCache.get(room);
-  if (!row) {
-    try {
-      row = await prisma.room.findUnique({ where: { name: room }, select: { id: true, type: true } });
-      if (row) roomDbCache.set(room, row);
-    } catch (err) {
-      logger.error('Room lookup failed', { error: err.message, room });
-    }
+  const userId = socket.user.id;
+  const cacheKey = gateKey(room, userId);
+  const allowed = gateAllowCache.get(cacheKey);
+  if (allowed) return { ok: true, row: allowed };
+  if (gateDenyCache.get(cacheKey)) {
+    return { ok: false, reason: 'You are not a member of this conversation' };
   }
-  if (!row) return { ok: false, reason: 'Conversation not found' };
+  // One query proves both row existence and membership: a room the caller is
+  // not a member of returns null, so no second lookup is needed and an
+  // outsider cannot pass by guessing a room name.
+  let gateRow = null;
   try {
-    const member = await Room.isMember(row.id, socket.user.id);
-    return member ? { ok: true, row } : { ok: false, reason: 'You are not a member of this conversation' };
+    gateRow = await prisma.room.findFirst({
+      where: { name: room, memberships: { some: { userId } } },
+      select: { id: true, type: true }
+    });
   } catch (err) {
-    logger.error('Membership check failed', { error: err.message, room });
-    return { ok: false, reason: 'Could not verify room access' };
+    logger.error('Room lookup failed', { error: err.message, room });
+    return { ok: false, reason: 'Could not open that conversation' };
   }
+  if (!gateRow) {
+    gateDenyCache.set(cacheKey, true);
+    return { ok: false, reason: 'You are not a member of this conversation' };
+  }
+  gateAllowCache.set(cacheKey, gateRow);
+  return { ok: true, row: gateRow };
 }
 
 // Neon's pooler intermittently refuses a connection under load. One retry keeps
@@ -467,76 +507,134 @@ io.on('connection', (socket) => {
     user.currentRoom = room;
     socket.join(room);
 
-    // Load messages from memory (fast) + fill from DB if memory is empty.
-    // The shared cache may hold rows this user hid or cleared, so every join
-    // filters the transcript per viewer: DB rows via listByRoom's SQL filter,
-    // cached rows via the per-user hide/clear sets below.
+    // The gate already proved membership and returned the row — reuse it
+    // instead of looking the same room up again. Everything this join needs
+    // (viewer filters, transcript, reactions) depends only on roomRow.id, so
+    // the DB path below fires as ONE parallel round instead of three awaited
+    // stages (viewer filters → messages → reactions).
     const viewerId = socket.user?.id;
-    let roomMessages = rooms[room] || [];
-    if (roomMessages.length === 0) {
+    const viewerRelevant = viewerId != null;
+    let hiddenIds = null;
+    let clearedAt = null;
+    let filterInputsOk = true;
+    // Transcript fast path: memory -> Redis -> Neon. The cache holds the
+    // viewer-neutral transcript only; the per-viewer hide/clear filter below
+    // runs on top of either source, so nothing user-specific is ever cached.
+    let roomMessages = [];
+    let fromCache = false;
+    if (viewerRelevant) {
+      const cached = await getCachedTranscript(room);
+      if (cached) {
+        roomMessages = cached;
+        fromCache = true;
+      }
+    }
+    if (!fromCache) {
       try {
-        let roomRow = roomDbCache.get(`${room}:full`);
-        if (!roomRow) {
-          roomRow = await prisma.room.findUnique({ where: { name: room } });
-          if (roomRow) roomDbCache.set(`${room}:full`, roomRow);
-        }
-        if (roomRow) {
-          const dbMessages = await Message.listByRoom(roomRow.id, { limit: 50, userId: socket.user?.id });
-          roomMessages = dbMessages.map(m => ({
-            id: String(m.id),
-            userId: m.userId,
-            nickname: m.username,
-            content: decryptMessage({ encrypted: m.encryptedContent, iv: m.iv, authTag: m.authTag }),
-            priority: m.priority,
-            timestamp: m.createdAt.getTime(),
-            room: room,
-            status: 'delivered'
-          }));
-          // Reactions are attached below for both DB and cached transcripts.
-          rooms[room] = roomMessages;
-        }
+        const [hidden, cleared, dbMessages] = await Promise.all([
+          viewerRelevant
+            ? prisma.hiddenMessage.findMany({ where: { userId: Number(viewerId) }, select: { messageId: true } })
+            : Promise.resolve(null),
+          viewerRelevant
+            ? prisma.clearedConversation.findUnique({ where: { userId_roomId: { userId: Number(viewerId), roomId: roomRow.id } } })
+            : Promise.resolve(null),
+          Message.listByRoom(roomRow.id, { limit: 50, userId: null, withReactions: true })
+        ]);
+        hiddenIds = new Set((hidden || []).map((h) => h.messageId));
+        clearedAt = cleared ? cleared.clearedAt : null;
+        roomMessages = dbMessages.map((m) => ({
+          id: String(m.id),
+          userId: m.userId,
+          nickname: m.username,
+          content: decryptMessage({ encrypted: m.encryptedContent, iv: m.iv, authTag: m.authTag }),
+          priority: m.priority,
+          timestamp: m.createdAt.getTime(),
+          room: room,
+          status: 'delivered',
+          // Reactions arrived inside the same round-trip. attachReactions()
+          // consumes flat [{ messageId, userId, emoji }] rows.
+          _reactionRows: m.reactions || []
+        }));
+        rooms[room] = roomMessages;
       } catch (dbErr) {
-        logger.error('Failed to load messages from DB', { error: dbErr.message });
+        logger.error('Failed to load transcript from DB', { error: dbErr.message, room });
+      }
+    } else {
+      rooms[room] = roomMessages;
+    }
+
+    // Viewer filter inputs for the cache path: hidden ids and clear cutoff are
+    // per-user and therefore never cached — fetch them in one parallel round
+    // whenever the transcript came from cache. On the DB path they arrived in
+    // the same round as the messages, so nothing more is needed.
+    if (viewerRelevant && fromCache) {
+      try {
+        const [hidden, cleared] = await Promise.all([
+          prisma.hiddenMessage.findMany({ where: { userId: Number(viewerId) }, select: { messageId: true } }),
+          prisma.clearedConversation.findUnique({ where: { userId_roomId: { userId: Number(viewerId), roomId: roomRow.id } } })
+        ]);
+        hiddenIds = new Set((hidden || []).map((h) => h.messageId));
+        clearedAt = cleared ? cleared.clearedAt : null;
+        filterInputsOk = true;
+      } catch (err) {
+        logger.error('Failed to load viewer filters', { error: err.message, room });
+        filterInputsOk = false;
       }
     }
 
-    // Re-fetch for cached transcripts too: reactions may have changed on another
-    // server instance. Never retain viewer-specific state in the shared cache.
-    try {
-      const ids = roomMessages.map((m) => Number(m.id)).filter(Number.isSafeInteger);
-      const fresh = await Reaction.listForMessages(ids);
-      roomMessages = attachReactions(roomMessages.map((m) => ({ ...m, reactions: [] })), fresh);
-    } catch (err) {
-      logger.error('Failed to refresh reactions', { error: err.message });
-    }
-    // Cutoff helper: clear-chat rows live per (user, room row id), and the
-    // room row id is already loaded for this join (dbMessages path or cache).
-    const roomRowIdForCutoff = async () => {
-      const cached = roomDbCache.get(room)?.id ?? roomDbCache.get(`${room}:full`)?.id;
-      if (cached) return Message.clearCutoffForUser(viewerId, cached);
-      const row = await prisma.room.findUnique({ where: { name: room }, select: { id: true } });
-      if (row) roomDbCache.set(room, { id: row.id, type: undefined });
-      return row ? Message.clearCutoffForUser(viewerId, row.id) : null;
-    };
-    // Per-viewer filter: the shared cache can hold rows this user hid
-    // (delete-for-me) or cleared, so apply their hide/clear sets here too.
-    if (viewerId != null) {
+    // Attach reactions for both cache and DB paths. The DB path already has
+    // its rows from the same round-trip; the cached path re-reads them because
+    // reactions change far more often than transcripts and other instances
+    // may have added some since this entry was stored.
+    if (roomMessages.length > 0) {
       try {
-        const [hidden, cutoff] = await Promise.all([
-          Message.hiddenIdsForUser(viewerId),
-          roomRowIdForCutoff()
-        ]);
-        if (hidden.size > 0 || cutoff) {
-          roomMessages = roomMessages.filter((m) => {
-            const n = Number(m.id);
-            if (Number.isSafeInteger(n) && hidden.has(n)) return false;
-            if (cutoff && m.timestamp <= cutoff) return false;
-            return true;
-          });
-        }
+        const reactionRows = fromCache
+          ? await Reaction.listForMessages(roomMessages.map((m) => Number(m.id)).filter(Number.isSafeInteger))
+          : roomMessages.flatMap((m) => m._reactionRows);
+        roomMessages = attachReactions(
+          roomMessages.map(({ _reactionRows, ...rest }) => ({ ...rest, reactions: [] })),
+          reactionRows
+        );
+        if (!fromCache) await setCachedTranscript(room, roomMessages);
       } catch (err) {
-        logger.error('Failed to filter transcript for viewer', { error: err.message });
+        logger.error('Failed to attach reactions', { error: err.message, room });
       }
+    }
+
+    // Per-viewer filter: the shared cache can hold rows this user hid
+    // (delete-for-me) or cleared, so apply their hide/clear sets here. If the
+    // filter inputs failed to load we must not serve unfiltered history —
+    // retry SQL-side before giving up with an error.
+    if (viewerRelevant && !filterInputsOk) {
+      try {
+        const retryRows = await Message.listByRoom(roomRow.id, { limit: 50, userId: viewerId });
+        roomMessages = retryRows.map((m) => ({
+          id: String(m.id),
+          userId: m.userId,
+          nickname: m.username,
+          content: decryptMessage({ encrypted: m.encryptedContent, iv: m.iv, authTag: m.authTag }),
+          priority: m.priority,
+          timestamp: m.createdAt.getTime(),
+          room: room,
+          status: 'delivered'
+        }));
+        const ids = roomMessages.map((m) => Number(m.id)).filter(Number.isSafeInteger);
+        const reactionRows = await Reaction.listForMessages(ids);
+        roomMessages = attachReactions(roomMessages.map((m) => ({ ...m, reactions: [] })), reactionRows);
+        filterInputsOk = true;
+      } catch (retryErr) {
+        logger.error('Viewer filter retry failed', { error: retryErr.message, room });
+        socket.emit('error', { message: 'Could not load this conversation, try again' });
+        return;
+      }
+    }
+    if (viewerRelevant && (hiddenIds?.size > 0 || clearedAt)) {
+      roomMessages = roomMessages.filter((m) => {
+        const n = Number(m.id);
+        if (Number.isSafeInteger(n) && hiddenIds.has(n)) return false;
+        if (clearedAt && m.timestamp <= clearedAt.getTime()) return false;
+        return true;
+      });
     }
     socket.emit('room_joined', { room, messages: roomMessages });
     logger.info(`${user.nickname} joined room`, { room, socketId: socket.id });
@@ -572,6 +670,9 @@ io.on('connection', (socket) => {
 
       const room = await Room.findOrCreateDm(socket.user.id, peer.id);
       roomDbCache.set(room.name, { id: room.id, type: room.type });
+      // A brand-new DM: any cached "not a member" denial from before the
+      // invite must not block the first open.
+      invalidateRoomGate(room.name);
       // A new DM creates a relationship on both sides — refresh presence scopes.
       invalidateRelatedNicknames(socket.user.id);
       invalidateRelatedNicknames(peer.id);
@@ -616,6 +717,8 @@ io.on('connection', (socket) => {
       }
       const { room, label } = await Room.createGroup({ name, userIds, createdBy: socket.user.id });
       roomDbCache.set(room.name, { id: room.id, type: room.type });
+      // Same as create_dm: clear stale denials for every founding member.
+      invalidateRoomGate(room.name);
       if (!rooms[room.name]) rooms[room.name] = [];
       const members = await Room.getMembers(room.id);
       // Everyone in the new group becomes visible to everyone else in it.
@@ -677,6 +780,10 @@ io.on('connection', (socket) => {
         roomDbCache.delete(room);
         roomDbCache.delete(`${room}:full`);
       }
+      // Membership changed → cached gate answers for this room are void for
+      // every user (added member must get in immediately, removed member must
+      // not linger on an allow entry).
+      invalidateRoomGate(room);
       // Membership changed → the related set of everyone in the group may have
       // shifted. Refresh now; the next presence broadcast uses fresh scopes.
       invalidateRelatedNicknames(socket.user.id);
@@ -782,6 +889,7 @@ io.on('connection', (socket) => {
       if (!rooms[data.room]) rooms[data.room] = [];
       rooms[data.room].push(messageObj);
       if (rooms[data.room].length > 100) rooms[data.room].shift();
+      await invalidateCachedTranscript(data.room).catch((err) => logger.warn('Transcript invalidate skipped', { error: err.message, room: data.room }));
 
       emitMessageBatched(data.room, messageObj);
       socket.emit('message_delivered', { id: messageObj.id });
@@ -1038,9 +1146,11 @@ io.on('connection', (socket) => {
           const gone = new Set(result.deleted.map(String));
           rooms[first.room.name] = rooms[first.room.name].filter((m) => !gone.has(String(m.id)));
         }
+        await invalidateCachedTranscript(first.room.name).catch((err) => logger.warn('Transcript invalidate skipped', { error: err.message }));
         io.to(first.room.name).emit('messages_deleted', { room: first.room.name, ids: result.deleted.map(String) });
       }
       if (result.hidden.length > 0) {
+        await invalidateCachedTranscript(first.room.name).catch((err) => logger.warn('Transcript invalidate skipped', { error: err.message }));
         socket.emit('messages_hidden', { room: first.room.name, ids: result.hidden.map(String) });
       }
       reply({ ok: true, ...result });
@@ -1061,6 +1171,7 @@ io.on('connection', (socket) => {
       if (!gate.ok || !gate.row) { reply({ ok: false, error: gate.reason || 'Conversation not found' }); return; }
       await Message.clearConversationForUser(socket.user.id, gate.row.id);
       if (rooms[room]) rooms[room] = [];
+      await invalidateCachedTranscript(room).catch((err) => logger.warn('Transcript invalidate skipped', { error: err.message, room }));
       socket.emit('room_joined', { room, messages: [] });
       reply({ ok: true, room });
       logger.info('Conversation cleared', { room, by: socket.user.username });
@@ -1097,6 +1208,8 @@ io.on('connection', (socket) => {
         await Message.hideConversationForUser(socket.user.id, row.id);
         if (rooms[room]) delete rooms[room];
         roomDbCache.delete?.(room);
+        invalidateRoomGate(room);
+        await invalidateCachedTranscript(room).catch((err) => logger.warn('Transcript invalidate skipped', { error: err.message, room }));
         socket.emit('conversation_deleted', { room, scope: 'me' });
         await emitConversationList(socket.user.id, socket);
         reply({ ok: true, room, scope: 'me' });
@@ -1105,6 +1218,8 @@ io.on('connection', (socket) => {
       const result = await Room.deleteConversation({ roomName: room, actorId: socket.user.id, scope });
       if (rooms[room]) delete rooms[room];
       roomDbCache.delete?.(room);
+      invalidateRoomGate(room);
+      await invalidateCachedTranscript(room).catch((err) => logger.warn('Transcript invalidate skipped', { error: err.message, room }));
       io.to(room).emit('conversation_deleted', { room, scope: 'everyone' });
       await emitConversationList(socket.user.id, socket);
       for (const id of others) {

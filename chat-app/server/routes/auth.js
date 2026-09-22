@@ -66,7 +66,11 @@ router.post('/register', authLimiter, validate(schemas.register), checkDisposabl
       });
       return { user: created, token: realToken };
     }));
-    await prisma.auditLog.create({ data: { userId: user.id, action: 'register', ipAddress: req.ip } }).catch(() => {});
+    // The signup receipt must never delay the response: it fires in the
+    // background. The Demo contact wiring below also runs before the 201, but
+    // it is the feature itself (the account must open with a contact whose DM
+    // row already exists), so it stays on the critical path.
+    prisma.auditLog.create({ data: { userId: user.id, action: 'register', ipAddress: req.ip } }).catch(() => {});
 
     // WhatsApp-style onboarding: every new account starts with exactly one
     // contact — Demo — so chat can be tested immediately. Best-effort: a
@@ -115,7 +119,10 @@ router.post('/login', authLimiter, validate(schemas.login), checkDisposableEmail
         }
       });
     });
-    await prisma.auditLog.create({ data: { userId: user.id, action: 'login', ipAddress: req.ip } }).catch(() => {});
+    // Login receipts must never delay the response the user waits on: the row
+    // fires in the background and swallows its own errors. On a cold Neon
+    // pool an awaited receipt can stall login by seconds.
+    prisma.auditLog.create({ data: { userId: user.id, action: 'login', ipAddress: req.ip } }).catch(() => {});
 
     logger.info('User logged in', { userId: user.id, username: user.username });
     setRefreshCookie(res, refreshToken);

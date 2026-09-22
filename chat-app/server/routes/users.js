@@ -13,14 +13,20 @@ router.use(strictLimiter);
 // they share a dm/group room with (their "contacts"); everyone else is hidden
 // until an invite creates that first conversation.
 router.get('/', async (req, res) => {
-  const related = await Room.listRelatedUserIds(req.user.id);
-  const users = related.length
-    ? await prisma.user.findMany({
-      where: { isActive: true, id: { in: related } },
-      orderBy: { username: 'asc' },
-      select: { id: true, username: true, displayName: true, avatarColor: true, isActive: true, lastLoginAt: true }
-    })
-    : [];
+  // One round-trip replaces the old pair (related ids → user fetch): the
+  // relationship filter runs nested in the WHERE. A contact is anyone sharing
+  // a dm/group room with the caller; self is excluded explicitly.
+  const users = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      id: { not: req.user.id },
+      memberships: {
+        some: { room: { type: { in: ['dm', 'group'] }, memberships: { some: { userId: req.user.id } } } }
+      }
+    },
+    orderBy: { username: 'asc' },
+    select: { id: true, username: true, displayName: true, avatarColor: true, isActive: true, lastLoginAt: true }
+  });
   res.json({ users });
 });
 

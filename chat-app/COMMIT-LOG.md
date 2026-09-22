@@ -1,34 +1,26 @@
 # Commit Log
 
 Daily commit ledger for this repository. **This log intentionally covers only
-the last five days (from 2026-09-17 onward); older pushes are out of scope.**
+the last five days (from 2026-09-18 onward); older pushes are out of scope.**
+
+**Read this first (for any future agent or reviewer):** this file is the
+single source of truth for what has been pushed, what is planned, and the
+pacing rules. Reading it top to bottom is enough to continue the work.
 
 **Rules**
 - Maximum **10 commits per day** so the contribution graph stays green every
   day without dumping work in bursts.
+- Each day is themed (one coherent story), every commit is buildable on its
+  own, and messages follow Conventional Commits with an explanatory body
+  (what changed, why, measured effect).
+- Work is deliberately spread across days - never dump the whole backlog in
+  one day; the upcoming-days table below holds the reserved plan.
 - This file is updated at the end of every day and committed as the day's
   **last commit** (`docs: update commit log`), so the hashes above it are
   always real.
 - Status: ✅ pushed to `origin/main` · 🔜 planned / not yet pushed.
 
 ---
-
-## 2026-09-17 — 12 commits — ✅ pushed
-
-| Hash | Message |
-|---|---|
-| `619d843` | feat(chat): add continental design tokens and shell layout styles |
-| `1241c30` | feat(chat): add chat transcript, bubbles, and composer styles |
-| `99aebaa` | feat(chat): add drawer, panel, and light theme styles |
-| `a74a98f` | feat(chat): add micro-motion layer |
-| `6002e98` | feat(chat): scaffold continental workspace with live transcript |
-| `1470d9b` | feat(chat): add own profile and settings drawer |
-| `39d7c7d` | feat(chat): add people directory and person profiles with presence |
-| `ef0fca6` | feat(chat): add notifications and room details drawers |
-| `7c05532` | feat(chat): port landing wave logo into workspace rail |
-| `ecfdaeb` | feat(chat): enlarge avatar initials for legibility |
-| `39a34b0` | feat(client): route /app through auth guard to Continental workspace |
-| `4e3f47f` | refactor(client): remove legacy chat components superseded by Continental app |
 
 ## 2026-09-18 — 10 commits — ✅ pushed
 
@@ -94,13 +86,57 @@ Server test suite at push time: **32 tests, 0 failures, 0 skipped.**
 
 ---
 
-## Upcoming days (scheduled, ≤10 per day)
+## 2026-09-22 — 8 commits — ✅ pushed (server speed & reliability)
 
-| Day | Planned |
+The user-facing complaints (slow invite, slow chat open, slow reload,
+slow login) traced to sequential database round-trips against WAN-hosted
+Neon. This day removed the redundant trips server-side and added a
+transcript cache. Client-side work (invite dialog, history reliability)
+is reserved for 2026-09-23 per the pacing rule.
+
+Test state at push time: server suite **22/22 pass** (live server,
+`DB_KEEPALIVE_MS=300000`), client **lint clean + 18/18 tests + build OK**,
+all six new query shapes verified against live Postgres. Environment
+notes: Neon was heavily throttled during this window (SELECT 1 up to
+~1s); the pool was widened in `.env` to `connection_limit=10,
+pool_timeout=30` (local-only, uncommitted).
+
+| Hash | Message |
 |---|---|
-| 2026-09-22 | Final end-to-end DM/group smoke verification run + any fixes it surfaces; `docs: update commit log` |
-| 2026-09-23+ | Remaining polish toward the ~20–25 commit total; each day ends with a log update |
+| `ff65068` | fix(server): fetch session with user in one query |
+| `3148c22` | fix(server): write audit receipts without blocking auth responses |
+| `913e1a7` | perf(server): fetch contact list in a single query |
+| `0608b3a` | perf(server): fold reactions into transcript queries |
+| `6c26cff` | perf(server): resolve conversation lists in one round-trip |
+| `e59594b` | perf(server): add redis-backed transcript cache |
+| `dea388f` | perf(server): single-round joins with cached membership gate |
+| *this commit* | docs: update commit log for 2026-09-22 |
+
+Effect: opening a chat costs 2 round-trips cold / 1 warm (was 5); page
+refresh ~6 queries (was ~13); login sheds the blocking audit receipt.
+
+---
+
+## Upcoming days (reserved so the green streak continues — never dump the backlog)
+
+| Day | Theme | Planned commits |
+|---|---|---|
+| 2026-09-23 | Client invite & reliability | Invite dialog JSX (styled modal replacing browser prompts: share-your-handle row, @-prefixed input, validation, success/error states) + `continental.css` styling + `docs: update commit log`. Files are already written and verified — held back on 09-22 deliberately |
+| 2026-09-24 | Production hygiene I | Fix CI typo (`rooms.test.jsserver/tests/http.test.js` paths are concatenated in `.github/workflows/ci.yml`, so the http suite never runs there); remove duplicate `notFound`/`errorHandler` registration in `index.js` (registered at two sites) + docs |
+| 2026-09-25 | Production hygiene II | Prisma migrations baseline (currently `db push` only, no `prisma/migrations` — risky on a live database); add a Postgres service to CI so suites actually run there (they self-skip without a database) + docs |
+| 2026-09-26 | Observability | Free-tier Sentry error tracking, richer `/health` (pool + cache state), docs |
+| 2026-09-27 | WhatsApp-style sidebar | Last-message preview, timestamp, unread badge on conversation rows, docs |
+| 2026-09-28 | History UX | "Load older messages" using the `before` cursor `Message.listByRoom` already supports, docs |
+| 2026-09-29 | Profile & settings polish | Avatar color picker, theme persistence, docs |
+| 2026-09-30 | Security pass | Encryption key-rotation support (versioned keys), rate-limit review, docs |
+| 2026-10-01 | Scale check | Run k6 scripts (`k6/chat-load.js`, `k6/socketio.js`), tune from results, docs |
+
+Each day must end with its `docs: update commit log` commit so this file
+stays truthful. If a day's work finishes early, add newly-discovered real
+work to later days rather than inflating any single day past 10.
 
 *Note for future runs: the live server should be started with
 `DB_KEEPALIVE_MS=300000` during test windows so Neon's scale-to-zero cannot
-suspend the compute mid-run.*
+suspend the compute mid-run. Also beware: dotenv does not override
+variables already present in the shell session — a stale exported
+`DATABASE_URL` silently wins over `.env`.*

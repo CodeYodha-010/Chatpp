@@ -57,6 +57,9 @@ const Room = {
 
   // Rooms visible to one user: ONLY the DMs and groups they belong to —
   // WhatsApp-style, no public rooms. `label` is what the sidebar renders.
+  // One round-trip: memberships (with their user rows) arrive nested on the
+  // rooms, so DM peers and group labels resolve in JS instead of two more
+  // sequential queries.
   async listForUser(userId) {
     const rows = await prisma.room.findMany({
       where: {
@@ -65,37 +68,32 @@ const Room = {
         memberships: { some: { userId } }
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, type: true }
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        description: true,
+        memberships: {
+          where: { userId: { not: userId } },
+          select: { user: { select: { id: true, username: true, displayName: true, avatarColor: true } } }
+        }
+      }
     });
-    // Only DMs have a single counterpart. Resolving them in one extra query
-    // keeps the public rooms (which may have many members) from being joined.
-    const dmIds = rows.filter((r) => r.type === 'dm').map((r) => r.id);
-    const peers = dmIds.length
-      ? await prisma.roomMember.findMany({
-        where: { roomId: { in: dmIds }, userId: { not: userId } },
-        select: { roomId: true, user: { select: { id: true, username: true, displayName: true, avatarColor: true } } }
-      })
-      : [];
-    const peerByRoom = new Map(peers.map((p) => [p.roomId, p.user]));
-    // Descriptions double as group labels, so load them only for groups.
-    const groupIds = rows.filter((r) => r.type === 'group').map((r) => r.id);
-    const groupRows = groupIds.length
-      ? await prisma.room.findMany({ where: { id: { in: groupIds } }, select: { id: true, description: true, name: true } })
-      : [];
-    const groupLabels = new Map(groupRows.map((r) => [r.id, r.description || r.name]));
     return rows.map((row) => {
-      const peer = peerByRoom.get(row.id) || null;
+      // A DM has exactly one other member; a group may have several, and any
+      // of them serves as the roster the client expands later.
+      const other = row.memberships[0]?.user || null;
       const label =
-        row.type === 'dm' && peer ? (peer.displayName || peer.username)
-        : row.type === 'group' ? (groupLabels.get(row.id) || row.name)
+        row.type === 'dm' && other ? (other.displayName || other.username)
+        : row.type === 'group' ? (row.description || row.name)
         : row.name;
       return {
         room: row.name,
         id: row.id,
         label,
         type: row.type,
-        peerId: row.type === 'dm' && peer ? peer.id : null,
-        peerColor: row.type === 'dm' && peer ? peer.avatarColor : null
+        peerId: row.type === 'dm' && other ? other.id : null,
+        peerColor: row.type === 'dm' && other ? other.avatarColor : null
       };
     });
   },
@@ -155,11 +153,10 @@ const Room = {
     const dmKey = `${x}:${y}`;
 
     const existing = await prisma.room.findUnique({ where: { dmKey } });
-    if (existing) {
-      await this.addMember(existing.id, userAId);
-      await this.addMember(existing.id, userBId);
-      return existing;
-    }
+    if (existing) return existing;
+    // Memberships were granted when the room was created, and a DM cannot be
+    // left (leave/remove are group-only), so re-upserting them on every
+    // re-open would be two wasted round-trips.
 
     const rows = await prisma.user.findMany({
       where: { id: { in: [x, y] } },
@@ -168,11 +165,14 @@ const Room = {
     if (rows.length !== 2) throw new Error('Both participants must exist');
 
     try {
+      // Nested membership create: room row and both member rows land in one
+      // statement group instead of three sequential round-trips.
       const room = await prisma.room.create({
-        data: { name: `dm_${x}_${y}`, dmKey, type: 'dm', description: '', createdBy: userAId }
+        data: {
+          name: `dm_${x}_${y}`, dmKey, type: 'dm', description: '', createdBy: userAId,
+          memberships: { create: [{ userId: userAId }, { userId: userBId }] }
+        }
       });
-      await this.addMember(room.id, userAId);
-      await this.addMember(room.id, userBId);
       return room;
     } catch (err) {
       // Unique collision: a concurrent request created the same DM first.

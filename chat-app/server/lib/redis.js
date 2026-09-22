@@ -36,6 +36,14 @@ export function getRedis() {
   return client;
 }
 
+export function withRedisTimeout(promise, ms = 800) {
+  let timer;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`redis timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
+}
+
 // Dedicated pub/sub pair for the Socket.IO adapter: subscribed connections
 // cannot run regular commands, so they must not share the presence client.
 export function createRedisAdapter() {

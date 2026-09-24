@@ -4,6 +4,10 @@ import env from '../config/env.js';
 import logger from '../utils/logger.js';
 
 const PRESENCE_KEY = 'chat:online';
+// Presence rows older than this with no live socket are crash leftovers
+// ("ghosts"): safe to delete. Younger unmatched rows are only hidden from
+// reads — deleting them could race a reconnect between fetchSockets and hgetall.
+const GHOST_AGE_MS = 5 * 60 * 1000;
 
 // ponytail: single shared ioredis connection; in-memory shim when REDIS_URL
 // is unset so dev works with zero installs. Swap to Upstash/Docker by env only.
@@ -79,8 +83,11 @@ export async function connectRedis() {
 }
 
 export async function setPresence(socketId, data) {
-  if (client) return client.hset(PRESENCE_KEY, socketId, JSON.stringify(data));
-  return mem.hset(PRESENCE_KEY, socketId, JSON.stringify(data));
+  // seenAt ages the row so reads can tell a connected socket's presence from
+  // a ghost left behind when a process died without running disconnect handlers.
+  const payload = JSON.stringify({ ...data, seenAt: Date.now() });
+  if (client) return client.hset(PRESENCE_KEY, socketId, payload);
+  return mem.hset(PRESENCE_KEY, socketId, payload);
 }
 
 export async function deletePresence(socketId) {
@@ -93,19 +100,39 @@ export async function allPresence() {
   return mem.hgetall(PRESENCE_KEY);
 }
 
-export async function getOnlineUsers() {
+export async function getOnlineUsers(liveIds = null) {
   const all = await allPresence();
-  const users = Object.values(all)
-    .map((v) => {
-      try { return JSON.parse(v); } catch { return null; }
+  const users = Object.entries(all)
+    .map(([socketId, v]) => {
+      try {
+        const parsed = JSON.parse(v);
+        return parsed ? { socketId, ...parsed } : null;
+      } catch { return null; }
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    // Ghost filter (optional liveIds from fetchSockets): a hash row whose
+    // socket is no longer connected survived a crash/missed disconnect — hide
+    // it from the list right away, and best-effort delete it once it is also
+    // older than GHOST_AGE_MS (the age guard protects the reconnect race).
+    .filter((u) => {
+      if (liveIds && !liveIds.has(u.socketId)) {
+        if (Date.now() - (u.seenAt || 0) > GHOST_AGE_MS) {
+          deletePresence(u.socketId).catch(() => {});
+        }
+        return false;
+      }
+      return true;
+    });
 
   // Deduplicate by nickname (multiple tabs = multiple socketIds with same nickname)
   const seen = new Set();
-  return users.filter(u => {
-    if (seen.has(u.nickname)) return false;
-    seen.add(u.nickname);
-    return true;
-  });
+  return users
+    .filter(u => {
+      if (seen.has(u.nickname)) return false;
+      seen.add(u.nickname);
+      return true;
+    })
+    // Strip internals so the payload clients receive is shape-identical to
+    // what this function returned before the ghost filter existed.
+    .map(({ socketId, seenAt, ...rest }) => rest);
 }

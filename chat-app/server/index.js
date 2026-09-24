@@ -58,8 +58,12 @@ async function relatedNicknames(userId, selfName) {
 // Every connected socket receives online_users filtered to its own related
 // set — never the global list.
 async function emitScopedOnlineUsers() {
-  const online = await getOnlineUsers();
+  // Socket snapshot first: it doubles as the live-id set the ghost filter
+  // needs, so presence rows without a connected socket (crash leftovers) never
+  // reach a client's online_users list.
   const sockets = await io.fetchSockets();
+  const liveIds = new Set(sockets.map((s) => s.id));
+  const online = await getOnlineUsers(liveIds);
   const perUser = new Map();
   for (const s of sockets) {
     const uid = s.user?.id;
@@ -91,6 +95,42 @@ async function emitPresenceEvent(event, nickname) {
     }
     const isSelf = (s.user.displayName || s.user.username) === nickname;
     if (!allowed || allowed.has(nickname) || isSelf) s.emit(event, { nickname });
+  }
+}
+
+// --- Presence coalescing -----------------------------------------------------
+// emitScopedOnlineUsers + emitPresenceEvent are each O(sockets): a fetchSockets
+// pass plus per-user scope sets. Called directly on every join/leave, N churn
+// events meant 2×N full-fan-out passes — O(N²) in aggregate under connection
+// bursts. All presence work queues here and flushes once per 750ms window, so
+// a burst collapses into one refresh + announcement pass. Presence is cosmetic;
+// sub-second lag is imperceptible (verify scripts allow 8s waits).
+const presenceQueue = { refresh: false, joins: [], leaves: [] };
+let presenceTimer = null;
+
+function schedulePresenceSync({ join = null, leave = null } = {}) {
+  presenceQueue.refresh = true;
+  if (join) presenceQueue.joins.push(join);
+  if (leave) presenceQueue.leaves.push(leave);
+  if (presenceTimer) return;
+  presenceTimer = setTimeout(flushPresence, 750);
+  presenceTimer.unref?.(); // never hold the process open during shutdown
+}
+
+async function flushPresence() {
+  presenceTimer = null;
+  const refresh = presenceQueue.refresh;
+  const joins = presenceQueue.joins.splice(0);
+  const leaves = presenceQueue.leaves.splice(0);
+  presenceQueue.refresh = false;
+  try {
+    if (refresh) await emitScopedOnlineUsers();
+    for (const n of joins) await emitPresenceEvent('user_joined', n);
+    for (const n of leaves) await emitPresenceEvent('user_left', n);
+  } catch (err) {
+    // A failed flush must not reject inside a socket handler; the next
+    // schedulePresenceSync call retries naturally.
+    logger.warn('Presence flush failed', { error: err.message });
   }
 }
 
@@ -451,8 +491,7 @@ io.on('connection', (socket) => {
       logger.info(`${user.nickname} disconnected`, { socketId: socket.id });
       users.delete(socket.id);
       await deletePresence(socket.id);
-      await emitScopedOnlineUsers();
-      await emitPresenceEvent('user_left', user.nickname);
+      schedulePresenceSync({ leave: user.nickname });
     }
   });
 
@@ -471,8 +510,7 @@ io.on('connection', (socket) => {
     await setPresence(socket.id, { nickname: effectiveNickname });
     logger.info(`${effectiveNickname} joined`, { socketId: socket.id });
 
-    await emitScopedOnlineUsers();
-    await emitPresenceEvent('user_joined', effectiveNickname);
+    schedulePresenceSync({ join: effectiveNickname });
     socket.emit('room_list', roomNames);
     await emitConversationList(socket.user?.id, socket);
   });

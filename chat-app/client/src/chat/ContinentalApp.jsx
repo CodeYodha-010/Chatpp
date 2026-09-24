@@ -180,6 +180,13 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
   // silently blank.
   const [joinLoading, setJoinLoading] = useState(false);
   const joinTimerRef = useRef(null);
+  // Invite dialog state — the flow lives in an in-app dialog now instead of
+  // the browser's prompt()/alert() popups.
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteName, setInviteName] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteDone, setInviteDone] = useState(null); // { room, label } once sent
   const reactionTriggerRef = useRef(null);
   const pendingReactions = useRef(new Map());
   const composerRef = useRef(null);
@@ -403,18 +410,69 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
       openRoom(res.room);
     });
   };
-  const inviteFriend = async () => {
-    const username = window.prompt('Enter the username of the friend you want to invite:');
-    if (!username) return;
-    const token = sessionStorage.getItem('chat_token');
-    if (!token) return;
-    try {
-      const data = await apiPost('/api/invite', { username }, token);
-      if (data.room) openRoom(data.room);
-      window.alert(data.message || 'Invite sent!');
-    } catch (err) { window.alert(err.message || 'Failed to send invite.'); }
+  const openInvite = () => {
+    setInviteName('');
+    setInviteError('');
+    setInviteDone(null);
+    setInviteBusy(false);
+    setInviteOpen(true);
   };
+  const closeInvite = () => { if (inviteBusy) return; setInviteOpen(false); };
+  const copyInviteHandle = async () => {
+    const v = '@' + (user?.username || '');
+    try {
+      await navigator.clipboard.writeText(v);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = v; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch { /* clipboard unavailable */ }
+      ta.remove();
+    }
+    setCopiedUname(true);
+    setTimeout(() => setCopiedUname(false), 2000);
+  };
+  // Mirrors the server's invite schema (alphanum, 3-30) so bad input fails
+  // right here with a friendly line instead of a round-trip.
+  const submitInvite = async (e) => {
+    e.preventDefault();
+    if (inviteBusy) return;
+    const clean = inviteName.trim().replace(/^@+/, '');
+    if (!/^[A-Za-z0-9]{3,30}$/.test(clean)) {
+      setInviteError('Usernames are 3-30 letters or numbers, no spaces.');
+      return;
+    }
+    if (clean.toLowerCase() === String(user?.username || '').toLowerCase()) {
+      setInviteError('That is you — share your own handle instead.');
+      return;
+    }
+    setInviteBusy(true);
+    setInviteError('');
+    const token = sessionStorage.getItem('chat_token');
+    if (!token) { setInviteBusy(false); return; }
+    try {
+      const data = await apiPost('/api/invite', { username: clean }, token);
+      // The invite route creates the DM for real, so surface it immediately.
+      if (data.room) {
+        setConvos((p) => (p.some((c) => c.room === data.room) ? p : [...p, { room: data.room, label: data.label || clean, type: 'dm', peerId: data.user?.id ?? null }]));
+      }
+      setInviteDone({ room: data.room, label: data.label || clean });
+    } catch (err) {
+      setInviteError(err.message || 'Could not send the invite.');
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+  // Esc closes the dialog, matching the app's shortcut list.
+  useEffect(() => {
+    if (!inviteOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !inviteBusy) setInviteOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [inviteOpen, inviteBusy]);
   const notifyTyping = () => {
+    if (!currentRoom) return;
     socket.emit('typing', { room: currentRoom, nickname });
     clearTimeout(typingRef.current);
     typingRef.current = setTimeout(() => socket.emit('stop_typing', { room: currentRoom, nickname }), 2000);
@@ -756,7 +814,7 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
           ))}
         </ul>
         <div className="ct-sf">
-          <button type="button" className="ct-ghost" onClick={inviteFriend}><UserPlus size={15} /> Invite</button>
+          <button type="button" className="ct-ghost" onClick={openInvite}><UserPlus size={15} /> Invite</button>
           <button type="button" className="ct-ghost danger" onClick={onLogout}><LogOut size={15} /> Logout</button>
         </div>
       </aside>
@@ -1045,7 +1103,7 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
                   <div className="ct-empty">
                     <p className="ct-emptytitle">No contacts yet</p>
                     <p className="ct-muted">Invite someone by @username — once connected, you both appear here. Nobody else can see you until you invite them.</p>
-                    <button type="button" className="ct-btn wide" onClick={inviteFriend}><UserPlus size={15} /> Invite by username</button>
+                    <button type="button" className="ct-btn wide" onClick={openInvite}><UserPlus size={15} /> Invite by username</button>
                   </div>
                 ) : (
                   <>
@@ -1065,7 +1123,7 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
                 </ul>
                   </>
                 )}
-                {allUsers.length > 0 && <button type="button" className="ct-btn wide" onClick={inviteFriend}><UserPlus size={15} /> Invite teammate</button>}
+                {allUsers.length > 0 && <button type="button" className="ct-btn wide" onClick={openInvite}><UserPlus size={15} /> Invite teammate</button>}
               </div>
             )}
             {panel === 'notify' && (
@@ -1134,6 +1192,64 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
               </div>
             )}
           </aside>
+        </div>
+      )}
+      {inviteOpen && (
+        <div className="ct-invite" role="dialog" aria-modal="true" aria-label="Invite someone" onClick={closeInvite}>
+          <div className="ct-invitebox" onClick={(e) => e.stopPropagation()}>
+            {inviteDone ? (
+              <div className="ct-invdone">
+                <span className="ct-invicon done"><Check size={22} /></span>
+                <h3>Invite sent</h3>
+                <p className="ct-muted">You can now chat with <b>@{inviteDone.label}</b> — the conversation is ready on both sides.</p>
+                <div className="ct-invbtns">
+                  {inviteDone.room && (
+                    <button type="button" className="ct-btn" onClick={() => { setInviteOpen(false); openRoom(inviteDone.room); }}>
+                      <Send size={14} /> Open conversation
+                    </button>
+                  )}
+                  <button type="button" className="ct-ghost" onClick={openInvite}><UserPlus size={14} /> Invite another</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="ct-invhead">
+                  <span className="ct-invicon"><UserPlus size={20} /></span>
+                  <div>
+                    <h3>Invite someone</h3>
+                    <p className="ct-muted">Start a private chat with their @username.</p>
+                  </div>
+                  <IB label="Close invite" onClick={closeInvite}><X size={16} /></IB>
+                </div>
+                {user?.username && (
+                  <div className="ct-invown">
+                    <span>Share yours: <b>@{user.username}</b></span>
+                    <button type="button" className="ct-unamecopy" onClick={copyInviteHandle}>
+                      {copiedUname ? <Check size={13} /> : <Copy size={13} />}
+                      {copiedUname ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                )}
+                <form onSubmit={submitInvite}>
+                  <label className={'ct-invfield' + (inviteError ? ' invalid' : '')}>
+                    <span className="at" aria-hidden="true">@</span>
+                    <input value={inviteName}
+                      onChange={(e) => { setInviteName(e.target.value); setInviteError(''); }}
+                      placeholder="their username, e.g. priya"
+                      autoFocus spellCheck={false} autoComplete="off" maxLength={30}
+                      aria-label="Username to invite" disabled={inviteBusy} />
+                  </label>
+                </form>
+                {inviteError && <p className="ct-inverror" role="alert">{inviteError}</p>}
+                <div className="ct-invbtns">
+                  <button type="button" className="ct-btn" disabled={inviteBusy || !inviteName.trim()} onClick={submitInvite}>
+                    {inviteBusy ? 'Inviting…' : 'Send invite'}
+                  </button>
+                  <button type="button" className="ct-ghost" disabled={inviteBusy} onClick={closeInvite}>Cancel</button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

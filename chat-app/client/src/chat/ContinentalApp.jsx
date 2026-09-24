@@ -175,6 +175,11 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
   const [convos, setConvos] = useState([]);
   const [actionError, setActionError] = useState('');
   const [copiedUname, setCopiedUname] = useState(false);
+  // Join loading state: the join effect clears the transcript, and the server
+  // answers asynchronously, so the screen names the wait instead of going
+  // silently blank.
+  const [joinLoading, setJoinLoading] = useState(false);
+  const joinTimerRef = useRef(null);
   const reactionTriggerRef = useRef(null);
   const pendingReactions = useRef(new Map());
   const composerRef = useRef(null);
@@ -187,7 +192,7 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
   // privacy); keep the raw list plus a lowercase lookup for dots/pills/labels.
   const onlineNicknames = new Set(onlineUsers.map((u) => String(u?.nickname || '').toLowerCase()));
   const onlineById = new Set((onlineUsers || []).map((u) => u?.userId).filter((v) => v != null).map(String));
-  const currentRoom = roomId ? decodeURIComponent(roomId) : 'general';
+  const currentRoom = roomId ? decodeURIComponent(roomId) : null; // no conversation selected yet
   const currentRoomRef = useRef(currentRoom);
   // Latest-ref: react-router v7 changes `navigate` identity on every route
   // change, so listing it in the listener effect deps would tear down and
@@ -218,7 +223,11 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
       }
       setConvos((p) => (p.some((c) => c.room === d.room) ? p.map((c) => (c.room === d.room ? { ...c, label: d.label || c.label } : c)) : [...p, { room: d.room, label: d.label || d.room, type: 'group', peerId: null }]));
     });
-    socket.on('error', (e) => { if (e?.message) setActionError(e.message); });
+    socket.on('error', (e) => {
+      if (joinTimerRef.current) { clearTimeout(joinTimerRef.current); joinTimerRef.current = null; }
+      setJoinLoading(false);
+      if (e?.message) setActionError(e.message);
+    });
     socket.on('messages_deleted', (d) => {
       if (!d?.ids) return;
       const gone = new Set((d.ids || []).map(String));
@@ -242,11 +251,31 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
         setNotif((p) => [{ id: 'conv-' + d.room + '-' + Date.now(), from: 'Continental', text: 'This conversation was deleted.', ts: Date.now(), read: false }, ...p].slice(0, 20));
       }
     });
+    // History: join_room is answered with room_joined. Apply it only when the
+    // answer still matches the room being shown — the socket stays in
+    // previously joined rooms, so a slow answer for an abandoned conversation
+    // must not stomp the new transcript.
+    socket.on('room_joined', (d) => {
+      if (!d || d.room !== currentRoomRef.current) return;
+      if (joinTimerRef.current) { clearTimeout(joinTimerRef.current); joinTimerRef.current = null; }
+      setJoinLoading(false);
+      // A successful join clears any stale error banner (e.g. the previous
+      // room's failure or a "database is waking up" notice).
+      setActionError('');
+      setMessages(d.messages || []);
+      setTypingUsers([]);
+    });
+    // Live messages carry their room. Append only the conversation being
+    // shown (unfiltered appends would bleed other chats into this
+    // transcript); other rooms still raise the notification bell.
     socket.on('new_message', (m) => {
-      setMessages((p) => [...p, m]);
+      if (!m?.room || m.room === currentRoomRef.current) setMessages((p) => [...p, m]);
       if (m.nickname !== nickname) setNotif((p) => [{ id: m.id || Date.now(), from: m.nickname, text: m.content || m.message || '', ts: m.timestamp || Date.now(), read: false }, ...p].slice(0, 20));
     });
-    socket.on('new_messages_batch', (b) => setMessages((p) => [...p, ...(b || [])]));
+    socket.on('new_messages_batch', (b) => {
+      const batchRoom = (b || [])[0]?.room;
+      if (!batchRoom || batchRoom === currentRoomRef.current) setMessages((p) => [...p, ...(b || [])]);
+    });
     socket.on('message_delivered', (d) => { setMessages((p) => p.map((m) => (m.id === d.id ? { ...m, status: 'delivered' } : m))); });
     socket.on('user_typing', (d) => {
       if (d?.nickname && d.nickname !== nickname) setTypingUsers((p) => (p.includes(d.nickname) ? p : [...p, d.nickname]));
@@ -291,10 +320,23 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
     // is a larger refactor deferred to a future pass.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages([]); setMobileList(false);
-    pendingReactions.current.clear(); setReactionTarget(null); setReactionError('');
+    pendingReactions.current.clear(); setReactionTarget(null); setReactionError(''); setActionError('');
     setMsgResults([]); setMsgSearch(''); setMsgSearchOpen(false); setMsgSearched(false); setHiliteId(null);
     setMsgSender(''); setMsgSearchScope('all'); setMsgHitIndex(0);
     setSelectedIds([]); setDeleteScopeOpen(false); setDeleteScopeTarget('messages'); setMoreOpen(false);
+    // No conversation selected (the app's landing state) joins nothing — the
+    // legacy auto-join of the public 'general' room is gone with the rework.
+    if (!currentRoom) return;
+    // The welcome screen never loads: only a real conversation join pays for a
+    // transcript round-trip.
+    if (joinTimerRef.current) clearTimeout(joinTimerRef.current);
+    setJoinLoading(true);
+    joinTimerRef.current = setTimeout(() => {
+      setJoinLoading((still) => {
+        if (still) setActionError('Still loading — the database is waking up. It usually answers within a few seconds.');
+        return still;
+      });
+    }, 4000);
     socket.emit('join_room', { room: currentRoom });
   }, [currentRoom]);
   useEffect(() => {
@@ -565,7 +607,7 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
   };
   const send = () => {
     const text = composer.trim();
-    if (!text) return;
+    if (!text || !currentRoom) return;
     socket.emit('send_message', { room: currentRoom, message: text, nickname });
     setComposer(''); setShowEmoji(false); caretRef.current = { start: null, end: null };
     clearTimeout(typingRef.current);
@@ -740,6 +782,11 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
           ) : (
             <>
               <button type="button" className="ct-back" aria-label="Back" onClick={() => setMobileList(true)}><ChevronLeft size={19} /></button>
+              {!currentRoom ? (
+                <div className="ct-hi"><h1>Continental</h1>
+                  <span className="ct-st">Pick a conversation — or invite someone</span>
+                </div>
+              ) : (<>
               <Av name={currentLabel} size={38} online={peerOnline(currentConvo)} />
               <div className="ct-hi"><h1>{currentLabel}</h1>
                 <span className="ct-st">{peerOnline(currentConvo) ? 'Online' : messages.length + ' messages'}</span>
@@ -750,6 +797,7 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
                 <IB label="Group details" onClick={() => { if (currentConvo?.type === 'group') loadGroupInfo(groupRoomId); setPanel('details'); }}><Info size={17} /></IB>
                 <IB label="More" active={moreOpen} onClick={() => setMoreOpen((v) => !v)} aria-haspopup="menu" aria-expanded={moreOpen}><MoreHorizontal size={17} /></IB>
               </div>
+              </>)}
             </>
           )}
         </header>
@@ -850,7 +898,11 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
           </div>
         )}
         <div className="ct-list" ref={listRef} role="log" aria-label="Messages" aria-live="polite">
-          {messages.length === 0 ? (
+          {!currentRoom ? (
+            <div className="ct-emptychat"><div className="ct-ei">✦</div><h3>Welcome back</h3><p>Pick a conversation on the left — or invite someone with their @username.</p></div>
+          ) : joinLoading && messages.length === 0 ? (
+            <div className="ct-emptychat"><div className="ct-ei">✦</div><h3>Loading conversation…</h3><p>Fetching the latest messages.</p></div>
+          ) : messages.length === 0 ? (
             <div className="ct-emptychat"><div className="ct-ei">✦</div><h3>Start the conversation</h3><p>Be the first to say something in {isDm ? currentLabel : '#' + currentRoom}</p></div>
           ) : messages.map((m, i) => (
             <M key={m.id || i} msg={m} prev={i > 0 ? messages[i - 1] : null} nickname={nickname} userId={user?.id}
@@ -859,9 +911,10 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
           ))}
           <div ref={endRef} />
         </div>
-        {typingUsers.length > 0 && !muted && (
+        {currentRoom && typingUsers.length > 0 && !muted && (
           <div className="ct-typing"><span className="ct-dots"><span /><span /><span /></span>{typingUsers.join(', ')} typing</div>
         )}
+        {currentRoom && (
         <div className="ct-comp">
           <div className="ct-cbox">
             <IB label="Attach"><Paperclip size={17} /></IB>
@@ -891,6 +944,7 @@ export default function ContinentalApp({ user, nickname, onLogout }) {
           </div>}
           {showEmoji && <EmojiPopover dark={dark} onSelect={applyEmoji} onClose={closeEmoji} />}
         </div>
+        )}
       </main>
       {panel && (
         <div className="ct-bd" onClick={() => { setPanel(null); setSelUser(null); }}>

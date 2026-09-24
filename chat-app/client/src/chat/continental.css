@@ -293,3 +293,40 @@ a.ct-room:hover .ct-av, .ct-pplbtn:hover .ct-av { transform: scale(1.07); }
 .ct-empty .ct-emptytitle { color: var(--ink); font-size: 14px; font-weight: 650; margin: 0; }
 .ct-empty p { margin: 0; font-size: 12.5px; line-height: 1.55; }
 .ct-empty .ct-btn { margin-top: 6px; }
+
+/* Invite dialog — replaces the old window.prompt()/alert() flow */
+.ct-invite { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  background: rgb(0 0 0 / 50%); padding: 16px; animation: ctInviteFade 160ms var(--ease-out) both; }
+@keyframes ctInviteFade { from { opacity: 0; } to { opacity: 1; } }
+.ct-invitebox { width: min(400px, 100%); background: var(--surface-1); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg, 16px); box-shadow: var(--shadow-lg); padding: 20px; display: flex; flex-direction: column;
+  gap: 12px; animation: ctInviteIn 220ms var(--ease-spring) both; }
+@keyframes ctInviteIn { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: none; } }
+.ct-invhead { display: flex; align-items: center; gap: 12px; padding-right: 6px; }
+.ct-invhead > div { min-width: 0; }
+.ct-invhead h3 { margin: 0; font-size: 15.5px; font-weight: 650; font-family: var(--font-display); }
+.ct-invhead .ct-muted { margin: 2px 0 0; font-size: 12.5px; }
+.ct-invhead .ct-ib { margin-left: auto; flex-shrink: 0; }
+.ct-invicon { width: 42px; height: 42px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; background: var(--gradient-accent); color: #fff; }
+.ct-invicon.done { background: var(--success); border-radius: 50%; }
+.ct-invown { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px 9px 12px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-md); background: var(--surface-2);
+  font-size: 12.5px; color: var(--ink-muted); }
+.ct-invown b { color: var(--ink); font-family: var(--font-mono); font-weight: 650; }
+.ct-invfield { display: flex; align-items: center; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-2); transition: border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out); }
+.ct-invfield:focus-within { border-color: var(--border-accent); box-shadow: var(--accent-glow); }
+.ct-invfield.invalid { border-color: var(--danger); }
+.ct-invfield.invalid:focus-within { box-shadow: none; }
+.ct-invfield .at { padding-left: 12px; color: var(--ink-muted); font-weight: 650; font-family: var(--font-mono); }
+.ct-invfield input { flex: 1; min-width: 0; border: none; outline: none; background: none; color: var(--ink);
+  font-size: 14px; padding: 11px 12px 11px 4px; font-family: var(--font-mono); }
+.ct-invfield input:disabled { opacity: .55; }
+.ct-inverror { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--danger); font-size: 12.5px; }
+.ct-invbtns { display: flex; gap: 8px; }
+.ct-invbtns .ct-btn, .ct-invbtns .ct-ghost { flex: 1; }
+.ct-invdone { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 6px 0 2px; }
+.ct-invdone h3 { margin: 0; font-size: 15.5px; font-family: var(--font-display); }
+.ct-invdone .ct-muted { margin: 0; font-size: 12.5px; }
+.ct-invdone .ct-muted b { color: var(--ink); }

@@ -18,10 +18,12 @@ const logger = winston.createLogger({
   ]
 });
 
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.simple()
-  }));
-}
+// Console transport is enabled in EVERY environment, including production.
+// On container platforms (Render/Docker) the logs/ files die with the
+// container — without stdout, production errors are invisible after a crash
+// or redeploy. Platform log drains read exactly this stream.
+logger.add(new winston.transports.Console({
+  format: winston.format.simple()
+}));
 
 export default logger;

@@ -42,6 +42,12 @@ export function issueCsrfToken(req, res, next) {
     maxAge: 60 * 60 * 1000,
   };
   res.cookie('_csrf', token, cookieOpts);
+  // Mirror the just-set cookie into req.cookies so getCsrfToken (which runs
+  // later in this same request) returns the SAME token the browser received.
+  // Without this, the first-ever /csrf-token call returned a random token
+  // that mismatched the cookie — breaking the first /refresh with
+  // "CSRF: token mismatch" and silently logging the user out.
+  req.cookies._csrf = token;
   next();
 }
 

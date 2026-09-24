@@ -63,8 +63,15 @@ function Shell() {
       if (n >= 5) { socket.disconnect(); navigate('/auth', { replace: true }); }
     };
     socket.on('connect_error', onErr);
-    socket.on('error', (e) => console.error('Socket error:', e.message));
-    return () => { socket.off('connect_error'); socket.off('error'); };
+    // Named handler + off(event, fn): a bare socket.off('error') here would
+    // also remove ContinentalApp's banner listener (ContinentalApp.jsx) on
+    // every navigation, since this effect re-runs whenever `navigate` changes.
+    const onSockErr = (e) => console.error('Socket error:', e.message);
+    socket.on('error', onSockErr);
+    return () => {
+      socket.off('connect_error', onErr);
+      socket.off('error', onSockErr);
+    };
   }, [navigate]);
   const ok = (u, token) => {
     setUser(u);

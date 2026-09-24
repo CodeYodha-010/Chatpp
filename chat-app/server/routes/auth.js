@@ -3,7 +3,7 @@ const router = express.Router();
 import User from '../models/User.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { signToken, generateRefreshToken } from '../utils/jwt.js';
-import { authenticateHTTP } from '../middleware/auth.js';
+import { authenticateHTTP, bumpSessionCache } from '../middleware/auth.js';
 import { validate, schemas, checkDisposableEmail } from '../middleware/validate.js';
 import { authLimiter } from '../middleware/rateLimit.js';
 import { csrfProtection, issueCsrfToken, getCsrfToken } from '../middleware/csrf.js';
@@ -172,6 +172,9 @@ router.post('/refresh', authLimiter, csrfProtection, async (req, res, next) => {
       })
     ]);
 
+    // The old jti no longer exists — bump so rotation revocation stays
+    // instant even with the session cache in front of the DB.
+    bumpSessionCache();
     setRefreshCookie(res, newRefreshToken);
     res.json({ user, token: newToken });
   } catch (e) {
@@ -181,6 +184,7 @@ router.post('/refresh', authLimiter, csrfProtection, async (req, res, next) => {
 
 router.post('/logout', authenticateHTTP, async (req, res) => {
   await prisma.session.deleteMany({ where: { userId: req.user.id } });
+  bumpSessionCache(); // every cached request/socket auth for this box dies here too
   res.clearCookie('refreshToken', COOKIE_OPTS);
   logger.info('User logged out', { userId: req.user.id });
   res.json({ message: 'Logged out' });

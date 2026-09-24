@@ -1,10 +1,27 @@
 import { verifyToken } from '../utils/jwt.js';
 import prisma, { withDb } from '../config/database.js';
+import LRUCache from '../lib/LRUCache.js';
 
 // Session + user come back in ONE round-trip (include): this middleware runs on
 // every request and every socket connect, so each saved query is a visible
 // latency win, especially against a remote Neon endpoint.
 const SESSION_USER_SELECT = { id: true, username: true, email: true, displayName: true, avatarColor: true, isActive: true };
+
+// Phase 1 (free-tier survival): the session→user lookup above runs on EVERY
+// authenticated request and socket handshake — one WAN round-trip per API call
+// against a remote Neon endpoint. This LRU absorbs it: hits skip the DB
+// entirely. Revocation stays instant because logout/refresh call
+// bumpSessionCache() (single process: clear() IS the invalidation). The
+// generation guard stops a request already mid-flight during a bump from
+// re-inserting a stale entry afterwards. Cached user objects are immutable —
+// no route mutates them (only lastLoginAt, which is not in the select).
+const sessionCache = new LRUCache(500, 30_000);
+let sessionCacheGen = 0;
+
+export function bumpSessionCache() {
+  sessionCacheGen++;
+  sessionCache.clear();
+}
 
 export async function authenticateHTTP(req, res, next) {
   const header = req.headers.authorization;
@@ -21,6 +38,13 @@ export async function authenticateHTTP(req, res, next) {
   // This runs on every request, so it must ride out a pool rebuild — an unwrapped
   // call here surfaced as an unhandled rejection when Neon suspended mid-run.
   if (decoded.jti) {
+    const cacheKey = 'jti:' + decoded.jti;
+    const cached = sessionCache.get(cacheKey);
+    if (cached) {
+      req.user = cached;
+      return next();
+    }
+    const genAtRead = sessionCacheGen;
     const session = await withDb(() => prisma.session.findUnique({
       where: { id: decoded.jti },
       include: { user: { select: SESSION_USER_SELECT } }
@@ -30,6 +54,7 @@ export async function authenticateHTTP(req, res, next) {
     }
     const user = session.user;
     if (!user || !user.isActive) return res.status(401).json({ error: 'User not found' });
+    if (genAtRead === sessionCacheGen) sessionCache.set(cacheKey, user);
     req.user = user;
     return next();
   }
@@ -56,6 +81,13 @@ export async function authenticateSocket(socket, next) {
   }
 
   if (decoded.jti) {
+    const cacheKey = 'jti:' + decoded.jti;
+    const cached = sessionCache.get(cacheKey);
+    if (cached) {
+      socket.user = cached;
+      return next();
+    }
+    const genAtRead = sessionCacheGen;
     const session = await withDb(() => prisma.session.findUnique({
       where: { id: decoded.jti },
       include: { user: { select: SESSION_USER_SELECT } }
@@ -65,6 +97,7 @@ export async function authenticateSocket(socket, next) {
     }
     const user = session.user;
     if (!user) return next(new Error('User not found'));
+    if (genAtRead === sessionCacheGen) sessionCache.set(cacheKey, user);
     socket.user = user;
     return next();
   }

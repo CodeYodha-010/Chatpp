@@ -1,5 +1,6 @@
 import { getRedis, withRedisTimeout } from './redis.js';
 import logger from '../utils/logger.js';
+import LRUCache from './LRUCache.js';
 
 // Recent-message cache: in-process map first (free, same tick), Redis second
 // (free Upstash tier, ~millisecond reads), Neon only on a miss. Keys are room
@@ -10,19 +11,21 @@ import logger from '../utils/logger.js';
 // delete, reaction) invalidates the room key so readers never see stale rows.
 // Redis calls are time-boxed: a slow cache must never make a join slower than
 // going straight to the database.
-const transcriptMem = new Map(); // key -> { at, messages }
-const TRANSCRIPT_MEM_TTL_MS = 60_000;
+// Bounded LRU instead of a plain Map: the old structure enforced TTL on read
+// but never evicted, so expired entries for rooms nobody revisited lived for
+// the life of the process. LRUCache applies the same age check on get and caps
+// resident memory at 500 rooms (least-recently-used evicted first).
+const transcriptMem = new LRUCache(500, 60_000);
 const TRANSCRIPT_REDIS_TTL_S = 300;
 
 function neutralKey(room) { return `chat:transcript:${room}`; }
 
 async function memGet(key) {
-  const mem = transcriptMem.get(key);
-  return mem && Date.now() - mem.at < TRANSCRIPT_MEM_TTL_MS ? mem.messages : null;
+  return transcriptMem.get(key) || null;
 }
 
 function memSet(key, messages) {
-  transcriptMem.set(key, { at: Date.now(), messages });
+  transcriptMem.set(key, messages);
 }
 
 async function redisGet(client, key) {

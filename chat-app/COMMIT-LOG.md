@@ -117,11 +117,43 @@ refresh ~6 queries (was ~13); login sheds the blocking audit receipt.
 
 ---
 
+## 2026-09-23 — 10 commits — ✅ pushed (invite & reliability)
+
+The reserved invite dialog shipped together with a reliability batch: the
+CSRF first-token fix, named socket-listener cleanup, stale-room history
+guards with the join-banner reset, the session lookup cache, the transcript
+memory cap, and presence coalescing with ghost-row filtering. Everything was
+validated before the first commit: client lint clean + 18/18 tests + build
+OK; server suite 22/22 against a live boot (`DB_KEEPALIVE_MS=300000`).
+
+| Hash | Message |
+|---|---|
+| `be49eee` | fix(server): return the issued csrf token on first call |
+| `d9f586c` | fix(server): log to stdout in production |
+| `5e5f736` | fix(client): remove only own socket listeners on cleanup |
+| `6415ce9` | fix(client): apply history only to the active room and clear the join banner |
+| `d2f55fe` | perf(server): cache session lookups for authenticated requests |
+| `405d4fe` | perf(server): bound transcript memory with an lru |
+| `9478e76` | perf(server): coalesce presence broadcasts and drop ghost rows |
+| `50a0980` | feat(client): add the in-app invite dialog |
+| `a275a3d` | style(client): add invite dialog styling |
+| *this commit* | docs: update commit log |
+
+Notes: session-cache revocation is instant via explicit cache bumps on
+logout and refresh (live-verified: immediate 401 after logout). Presence
+flushes at most once per 750ms window; `getOnlineUsers` hides sockets with
+no live connection and deletes rows older than 5 minutes. Newly discovered
+but deliberately NOT scheduled today (moved to later days per the pacing
+rule): the nav rail is removed below 768px with no mobile replacement,
+video/attach buttons are decorative, `dompurify`/`marked` and
+`utils/crypto.js` are unused.
+
+---
+
 ## Upcoming days (reserved so the green streak continues — never dump the backlog)
 
 | Day | Theme | Planned commits |
 |---|---|---|
-| 2026-09-23 | Client invite & reliability | Invite dialog JSX (styled modal replacing browser prompts: share-your-handle row, @-prefixed input, validation, success/error states) + `continental.css` styling + `docs: update commit log`. Files are already written and verified — held back on 09-22 deliberately |
 | 2026-09-24 | Production hygiene I | Fix CI typo (`rooms.test.jsserver/tests/http.test.js` paths are concatenated in `.github/workflows/ci.yml`, so the http suite never runs there); remove duplicate `notFound`/`errorHandler` registration in `index.js` (registered at two sites) + docs |
 | 2026-09-25 | Production hygiene II | Prisma migrations baseline (currently `db push` only, no `prisma/migrations` — risky on a live database); add a Postgres service to CI so suites actually run there (they self-skip without a database) + docs |
 | 2026-09-26 | Observability | Free-tier Sentry error tracking, richer `/health` (pool + cache state), docs |
